@@ -23,7 +23,7 @@ bev_grid_map_size = [
 
 
 model = dict(
-    type='BEVFusion',
+    type='PlusFusion',
     used_sensors=used_sensors,
     use_offline_img_feat=use_offline_img_feat,
     img_backbone=dict(
@@ -42,11 +42,14 @@ model = dict(
     #     out_channels=64,
     #     accelerate=False,
     # ),
-    img_neck=dict(type='DepthLSSTransform',
+    img_neck=dict(type='HeightDepthFusion',
         in_channels=64,
         out_channels=64,
         image_size=(540, 960),
         feature_size=(104, 200),
+        point_cloud_range = point_cloud_range,
+        bev_grid_map_size = bev_grid_map_size,
+        used_sensors = used_sensors,
         xbound=grid_config['x'],
         ybound=grid_config['y'],
         zbound=grid_config['z'],
@@ -70,10 +73,10 @@ model = dict(
         type='PointPillarsScatter', in_channels=64, output_shape=bev_grid_map_size),
     pts_backbone=dict(
         type='PcdetBackbone',
-        in_channels=128,
+        in_channels=64,
         layer_nums=[3, 5, 5],
         layer_strides=[2, 2, 2],
-        num_filters=[128, 128, 256],
+        num_filters=[64, 128, 256],
         upsample_strides=[1, 2, 4],
         num_upsample_filters=[128, 128, 128],
         ),
@@ -230,7 +233,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=1,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',

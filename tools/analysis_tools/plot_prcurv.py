@@ -58,9 +58,14 @@ def main(exps: List[str],indexs: List[int],distance: int,save_plot_path: str):
 
 if __name__ == '__main__':
     # fire.Fire(main)
-    exps = ['/mnt/intel/jupyterhub/swc/train_log/mm3d/pointpillars_L4_all_class_200e_lr0_001_p32000_pt48_v_032/20221001-000342/eval',
-          '/mnt/intel/jupyterhub/swc/train_log/mm3d/prefusion_L4_all_class_200e_lr0_001_p32000_pt48_v_032/20221001-002750/eval']
-    indexs = [80, 80]
-    distance = 200
-    save_plot_path = '/mnt/intel/jupyterhub/swc/train_log/mm3d/pointpillars_L4_all_class_200e_lr0_001_p32000_pt48_v_032/20221001-000342/ap_curve'
+    exps = ['/mnt/intel/jupyterhub/mrb/work_dirs/pcdet_bev_fusion_load_img_fea/lidar_only_80_epoch_25cm_4gpu_20221030-102547/eval',
+        #   '/mnt/intel/jupyterhub/mrb/train_log/mm3d/pcdet_bev_fusion_load_img_fea/lss_80_epoch_25cm_4gpu_20221028-112316/eval',
+          '/mnt/intel/jupyterhub/mrb/train_log/mm3d/pcdet_bev_fusion_load_img_fea/depthlss_80_epoch_25cm_4gpu_20221028-112703/eval',
+          '/mnt/intel/jupyterhub/mrb/work_dirs/prefusion_L3_random_100/prefusion_L3_20221015-095649/eval',
+          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/no_proj/pcdet_bev_fusion_height/2022-11-16T12-47-00/eval',
+          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_bev_fusion_height/2022-11-11T16-07-56/eval',
+          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_plus_fusion/2022-11-13T00-40-37/eval']
+    indexs = [80, 80, 80, 80, 80, 80]
+    distance = 100
+    save_plot_path = '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_bev_fusion_height/'
     main(exps, indexs, distance, save_plot_path)

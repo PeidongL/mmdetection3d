@@ -13,10 +13,10 @@ export NCCL_P2P_DISABLE=1
 # CUDA_VISIBLE_DEVICES="0,1,2,3,4,5,6,7" 
 function train()
 {
-    PORT=30000 \
+    PORT=30004 \
     bash tools/dist_train.sh \
-    configs/L3_data_models/pcdet_bev_fusion.py \
-    8 --work-dir work_dirs --extra-tag  debug
+    configs/L3_data_models/pcdet_bev_fusion_height.py \
+    4 --work-dir work_dirs --extra-tag  no_proj
 }
 
 function plot_pr_curv()

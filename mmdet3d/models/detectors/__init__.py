@@ -10,6 +10,7 @@ from .imvoxelnet import ImVoxelNet
 from .mink_single_stage import MinkSingleStage3DDetector
 from .mvx_faster_rcnn import DynamicMVXFasterRCNN, MVXFasterRCNN
 from .bev_fusion import BEVFusion
+from .plus_fusion import PlusFusion
 from .mvx_two_stage import MVXTwoStageDetector
 from .parta2 import PartA2
 from .point_rcnn import PointRCNN
