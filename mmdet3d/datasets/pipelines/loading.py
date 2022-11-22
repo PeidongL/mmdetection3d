@@ -800,7 +800,8 @@ class LoadPointsFromFile(object):
                  shift_height=False,
                  use_color=False,
                  file_client_args=dict(backend='disk'),
-                 point_type='float32'):
+                 point_type='float32',
+                 using_tele=False):
         self.shift_height = shift_height
         self.use_color = use_color
         if isinstance(use_dim, int):
@@ -816,6 +817,7 @@ class LoadPointsFromFile(object):
         self.file_client = None
 
         self.point_type = point_type
+        self.using_tele = using_tele
 
     def _load_points(self, pts_filename):
         """Private function to load point clouds data.
@@ -864,6 +866,14 @@ class LoadPointsFromFile(object):
         points = points.reshape(-1, self.load_dim)
         points = points[:, self.use_dim]
         attribute_dims = None
+        
+        if self.using_tele:
+            tele_pts_filename = pts_filename.replace("pointcloud", "tele_points")
+            if osp.exists(tele_pts_filename):
+                tele_points = self._load_points(tele_pts_filename)
+                tele_points = tele_points.reshape(-1, self.load_dim)
+                tele_points = tele_points[:, self.use_dim]
+                points = np.concatenate([points, tele_points], axis=0)
 
         if self.shift_height:
             floor_height = np.percentile(points[:, 2], 0.99)
@@ -1175,6 +1185,8 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
         results['ori_shape'] = []
         results['img_fields'] = ['img']
         results['img_feature'] = []
+        results['side_img_feature'] = []
+        results['img_feature_shape'] = []
 
         for idx, filename in enumerate(results['img_info']):
             img_bytes = self.file_client.get(filename)
@@ -1186,7 +1198,6 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
             feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
             results['filename'].append(filename)
             results['ori_filename'].append(filename)
-            results['img'].append(img)
             if img.shape[0] == 1080:
                 lidar2cam = results['lidar2camera'][idx]
                 
@@ -1199,11 +1210,20 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
                 
                 results['img_shape'].append((540, 960, 3))
                 results['lidar2img'][idx] = lidar2img
+                img = mmcv.imrescale(img, 0.5)
             else:
                 results['img_shape'].append(img.shape)
-                
+            
+
+            results['img'].append(img)
             results['ori_shape'].append(img.shape)
-            results['img_feature'].append(np.load(feature_name))
+            img_feature = np.load(feature_name)
+            if 'side_left_camera' in feature_name or 'side_right_camera' in feature_name:
+                results['side_img_feature'].append(img_feature)
+            else:  
+                results['img_feature'].append(img_feature)
+            
+            results['img_feature_shape'].append(img_feature.shape)
         return results
 
     def __repr__(self):

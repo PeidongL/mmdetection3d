@@ -234,6 +234,9 @@ def main():
         train_cfg=cfg.get('train_cfg'),
         test_cfg=cfg.get('test_cfg'))
     model.init_weights()
+    
+    if 'use_sync_bn' in cfg and cfg['use_sync_bn']:
+        model = torch.nn.SyncBatchNorm.convert_sync_batchnorm(model)
 
     if 'freeze_lidar_components' in cfg and cfg['freeze_lidar_components'] is True:
         logger.info(f"param need to update:")
@@ -282,10 +285,7 @@ def main():
     if len(cfg.workflow) == 2: # 如果workflow长度是2，则把val dataset也加上
         val_dataset = copy.deepcopy(cfg.data.val)
         # in case we use a dataset wrapper
-        if 'dataset' in cfg.data.train:
-            val_dataset.pipeline = cfg.data.train.dataset.pipeline
-        else:
-            val_dataset.pipeline = cfg.data.train.pipeline
+        val_dataset.pipeline = cfg.train_pipeline
         # set test_mode=False here in deep copied config
         # which do not affect AP/AR calculation later
         # refer to https://mmdetection3d.readthedocs.io/en/latest/tutorials/customize_runtime.html#customize-workflow  # noqa
