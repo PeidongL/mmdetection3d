@@ -277,6 +277,7 @@ class HeightDepthTransform(DepthLSSTransform):
             ihr_layers.append(
                 IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=2)
             )
+        self.feature_size = feature_size
         self.ihr_layers = nn.ModuleList(ihr_layers)
         self.bev_h = bev_grid_map_size[0]
         self.bev_w = bev_grid_map_size[1]
