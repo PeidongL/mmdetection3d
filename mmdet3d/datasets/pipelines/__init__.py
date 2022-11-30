@@ -2,10 +2,13 @@
 from .compose import Compose
 from .dbsampler import DataBaseSampler
 from .formating import Collect3D, DefaultFormatBundle, DefaultFormatBundle3D, DefaultFormatBundleMultiCam3D
-from .loading import (LoadAnnotations3D, LoadImageFromFileMono3D,
-                      LoadMultiViewImageFromFiles, LoadPointsFromDict,
-                      LoadPointsFromFile, LoadPointsFromMultiSweeps,
-                      NormalizePointsColor, PointSegClassMapping, LoadMultiCamImagesFromFile)
+from .loading import (LoadAnnotations3D, LoadAnnotationsBEVDepth,
+                      LoadImageFromFileMono3D, LoadMultiViewImageFromFiles,
+                      LoadPointsFromDict, LoadPointsFromFile,
+                      LoadPointsFromMultiSweeps, NormalizePointsColor,
+                      PointSegClassMapping, PointToMultiViewDepth,
+                      PrepareImageInputs,
+                      LoadMultiCamImagesFromFile)
 from .test_time_aug import MultiScaleFlipAug3D
 # yapf: disable
 from .transforms_3d import (AffineResize, BackgroundPointsFilter,
@@ -33,5 +36,6 @@ __all__ = [
     'RandomJitterPoints', 'AffineResize', 'RandomShiftScale',
     'LoadPointsFromDict', 'MultiViewWrapper', 'RandomRotate',
     'RangeLimitedRandomCrop', 'DefaultFormatBundleMultiCam3D', 'LoadMultiCamImagesFromFile',
-    'PaintPointsWithImageFeature', 'RandomFlipLidarOnly'
+    'PaintPointsWithImageFeature', 'RandomFlipLidarOnly',
+    'PrepareImageInputs', 'LoadAnnotationsBEVDepth', 'PointToMultiViewDepth'
 ]
