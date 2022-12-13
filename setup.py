@@ -227,13 +227,13 @@ if __name__ == '__main__':
         },
         ext_modules=[
             make_cuda_ext(
-                name="bev_pool_ext",
-                module="mmdet3d.ops.bev_pool",
+                name='bev_pool_v2_ext',
+                module='mmdet3d.ops.bev_pool_v2',
                 sources=[
-                    "src/bev_pool.cpp",
-                    "src/bev_pool_cuda.cu",
+                    'src/bev_pool.cpp',
+                    'src/bev_pool_cuda.cu',
                 ],
-            )
+            ),
         ],
         cmdclass={'build_ext': BuildExtension},
         zip_safe=False)

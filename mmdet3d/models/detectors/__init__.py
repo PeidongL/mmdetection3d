@@ -1,5 +1,6 @@
 # Copyright (c) OpenMMLab. All rights reserved.
 from .base import Base3DDetector
+from .bevdet import BEVDepth4D, BEVDet, BEVDet4D, BEVDetTRT
 from .centerpoint import CenterPoint
 from .dynamic_voxelnet import DynamicVoxelNet
 from .fcos_mono3d import FCOSMono3D
@@ -10,6 +11,7 @@ from .imvoxelnet import ImVoxelNet
 from .mink_single_stage import MinkSingleStage3DDetector
 from .mvx_faster_rcnn import DynamicMVXFasterRCNN, MVXFasterRCNN
 from .bev_fusion import BEVFusion
+from .plus_fusion import PlusFusion
 from .mvx_two_stage import MVXTwoStageDetector
 from .parta2 import PartA2
 from .point_rcnn import PointRCNN
@@ -29,5 +31,6 @@ __all__ = [
     'DynamicMVXFasterRCNN', 'MVXFasterRCNN', 'PartA2', 'VoteNet', 'H3DNet',
     'CenterPoint', 'SSD3DNet', 'ImVoteNet', 'SingleStageMono3DDetector',
     'FCOSMono3D', 'ImVoxelNet', 'GroupFree3DNet', 'PointRCNN', 'SMOKEMono3D',
-    'MinkSingleStage3DDetector', 'SASSD', 'ObjDGCNN', 'TransFusionDetector', 'BEVFusion'
+    'MinkSingleStage3DDetector', 'SASSD', 'ObjDGCNN', 'TransFusionDetector', 'BEVFusion',
+    'BEVDet', 'BEVDet4D', 'BEVDepth4D', 'BEVDetTRT'
 ]

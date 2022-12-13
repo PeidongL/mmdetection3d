@@ -1,5 +1,5 @@
 _base_ = [
-    '../../_base_/schedules/cyclic_40e.py', '../../_base_/default_runtime.py'
+    '../_base_/schedules/cyclic_40e.py', '../_base_/default_runtime.py'
 ]
 
 # model settings
@@ -11,8 +11,8 @@ used_sensors = {'use_lidar': True,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
-    'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
-    'y': [point_cloud_range[1], point_cloud_range[4], voxel_size[1]],
+    'x': [0, 100, voxel_size[0]],
+    'y': [-10, 10, voxel_size[1]],
     'z': [-10.0, 10.0, 20.0],
     'depth': [1.0, 100.0, 1],
 }
@@ -35,11 +35,20 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=False),
         norm_eval=True,
         style='caffe'),
-    img_view_transformer=dict(type='LSSTransform',
+    # img_neck=dict(type='LSSViewTransformer',
+    #     grid_config=grid_config,
+    #     feature_size=(104, 200),
+    #     in_channels=64,
+    #     out_channels=64,
+    #     accelerate=False,
+    # ),
+    img_neck=dict(type='HeightDepthTransform',
         in_channels=64,
         out_channels=64,
         image_size=(540, 960),
         feature_size=(104, 200),
+        point_cloud_range = point_cloud_range,
+        bev_grid_map_size = bev_grid_map_size,
         xbound=grid_config['x'],
         ybound=grid_config['y'],
         zbound=grid_config['z'],
@@ -63,10 +72,10 @@ model = dict(
         type='PointPillarsScatter', in_channels=64, output_shape=bev_grid_map_size),
     pts_backbone=dict(
         type='PcdetBackbone',
-        in_channels=128,
+        in_channels=64,
         layer_nums=[3, 5, 5],
         layer_strides=[2, 2, 2],
-        num_filters=[128, 128, 256],
+        num_filters=[64, 128, 256],
         upsample_strides=[1, 2, 4],
         num_upsample_filters=[128, 128, 128],
         ),
@@ -223,7 +232,7 @@ test_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=1,
+    samples_per_gpu=8,
     workers_per_gpu=8,
     train=dict(
         type='RepeatDataset',

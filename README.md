@@ -240,57 +240,112 @@ Results and models are available in the [model zoo](docs/en/model_zoo.md).
 ## Installation
 
 Please refer to [getting_started.md](docs/en/getting_started.md) for installation.
+# BEVDet
+
+
+ ![Illustrating the performance of the proposed BEVDet on the nuScenes val set](./resources/nds-fps.png)
+ 
+## News
+* **2022.11.24** A new branch of bevdet codebase, dubbed dev2.0, is released. dev2.0 includes the following features:
+1. support **BEVPoolv2**, whose inference speed is up to **15.1 times** the previous fastest implementation of Lift-Splat-Shoot view transformer. It is also far less memory consumption.
+ ![bevpoolv2](./resources/bevpoolv2.png)
+ ![bevpoolv2](./resources/bevpoolv2_performance.png)
+2. use the origin of ego coordinate system as the center of the receptive field instead of the Lidar's.
+3. **support conversion of BEVDet from pytorch to TensorRT.**
+4. use the long term temporal fusion as SOLOFusion.
+5. train models without CBGS by default.
+6. use key frame for temporal fusion.
+
+* [History](./docs/en/news.md)
+
+
+## Main Results
+| Config            | mAP      | NDS     | FPS     |   Model | Log
+|--------|----------|---------|--------|-------------|-------|
+| [**BEVDet-R50**](configs/bevdet/bevdet-r50.py)       | 27.8     | 32.2    | 18.7    | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing)   | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing) 
+| [**BEVDet-R50-CBGS**](configs/bevdet/bevdet-r50-cbgs.py)       | 30.7     | 38.2    | 18.7   | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing)   | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing) 
+| [**BEVDet-R50-4D-Depth-CBGS**](configs/bevdet/bevdet4d-r50-depth-cbgs.py)       | 40.2/40.6#     | 52.3/52.6#    | 16.4  | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing)   | [google](https://drive.google.com/drive/folders/1Dh2FbEChbfhIaBHimPP4jbibs8XjJ5rx?usp=sharing) 
+
+\# align previous frame bev feature during the view transformation. 
+## Inference speed with different backends
+
+| Backend            | 256x704      | 384x1056     | 512x1408    | 640x1760 
+|--------|----------|---------|--------|-------------|
+|PyTorch        | 37.9    | 64.7   | 105.7   | 154.2  
+|TensorRT       | 18.4   | 25.9   | 40.0    | 58.3    
+|TensorRT-FP16  | 7.2    | 10.6   | 15.3    | 21.2     
+* Evaluate with [**BEVDet-R50**](configs/bevdet/bevdet-r50.py) on a RTX 3090 GPU. We omit the postprocessing, which runs about 14.3 ms with the PyTorch backend.
 
 ## Get Started
-
-Please see [getting_started.md](docs/en/getting_started.md) for the basic usage of MMDetection3D. We provide guidance for quick run [with existing dataset](docs/en/1_exist_data_model.md) and [with customized dataset](docs/en/2_new_data_model.md) for beginners. There are also tutorials for [learning configuration systems](docs/en/tutorials/config.md), [adding new dataset](docs/en/tutorials/customize_dataset.md), [designing data pipeline](docs/en/tutorials/data_pipeline.md), [customizing models](docs/en/tutorials/customize_models.md), [customizing runtime settings](docs/en/tutorials/customize_runtime.md) and [Waymo dataset](docs/en/datasets/waymo_det.md).
-
-Please refer to [FAQ](docs/en/faq.md) for frequently asked questions. When updating the version of MMDetection3D, please also check the [compatibility doc](docs/en/compatibility.md) to be aware of the BC-breaking updates introduced in each version.
-
-## Model deployment
-
-Now MMDeploy has supported some MMDetection3D model deployment. Please refer to [model_deployment.md](docs/en/tutorials/model_deployment.md) for more details.
-
-## Citation
-
-If you find this project useful in your research, please consider cite:
-
-```latex
-@misc{mmdet3d2020,
-    title={{MMDetection3D: OpenMMLab} next-generation platform for general {3D} object detection},
-    author={MMDetection3D Contributors},
-    howpublished = {\url{https://github.com/open-mmlab/mmdetection3d}},
-    year={2020}
-}
+#### Installation and Data Preparation
+1. Please refer to [getting_started.md](docs/en/getting_started.md) for installing BEVDet as mmdetection3d. [Docker](docker/Dockerfile) is recommended for environment preparation.
+2. Prepare nuScenes dataset as introduced in [nuscenes_det.md](docs/en/datasets/nuscenes_det.md) and create the pkl for BEVDet by running:
+```shell
+# python tools/create_data_bevdet.py
 ```
 
-## Contributing
+#### Estimate the inference speed of BEVDet
+```shell
+# with pre-computation acceleration
+python tools/analysis_tools/benchmark.py $config $checkpoint
+# 4D with pre-computation acceleration
+python tools/analysis_tools/benchmark_sequential.py $config $checkpoint
+# view transformer only
+python tools/analysis_tools/benchmark.py $config $checkpoint
+```
 
-We appreciate all contributions to improve MMDetection3D. Please refer to [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the contributing guideline.
+#### Estimate the flops of BEVDet
+```shell
+python tools/analysis_tools/get_flops.py configs/bevdet/bevdet-r50.py --shape 256 704
+```
+
+#### Visualize the predicted result.
+* Official implementation. (Visualization locally only)
+```shell
+python tools/test.py $config $checkpoint --show --show-dir $save-path
+```
+* Private implementation. (Visualization remotely/locally)
+```shell
+python tools/test.py $config $checkpoint --format-only --eval-options jsonfile_prefix=$savepath
+python tools/analysis_tools/vis.py $savepath/pts_bbox/results_nusc.json
+```
+
+#### Convert to TensorRT and test inference speed.
+```shell
+1. install mmdeploy from https://github.com/HuangJunJie2017/mmdeploy
+2. convert to TensorRT
+python tools/convert_bevdet_to_TRT.py $config $checkpoint $work_dir --fuse-conv-bn --fp16
+3. test inference speed
+python tools/analysis_tools/benchmark_trt.py $config $engine
+```
 
 ## Acknowledgement
+This project is not possible without multiple great open-sourced code bases. We list some notable examples below.
+* [open-mmlab](https://github.com/open-mmlab) 
+* [CenterPoint](https://github.com/tianweiy/CenterPoint)
+* [Lift-Splat-Shoot](https://github.com/nv-tlabs/lift-splat-shoot)
+* [Swin Transformer](https://github.com/microsoft/Swin-Transformer)
+* [BEVFusion](https://github.com/mit-han-lab/bevfusion)
+* [BEVDepth](https://github.com/Megvii-BaseDetection/BEVDepth)
 
-MMDetection3D is an open source project that is contributed by researchers and engineers from various colleges and companies. We appreciate all the contributors as well as users who give valuable feedbacks.
-We wish that the toolbox and benchmark could serve the growing research community by providing a flexible toolkit to reimplement existing methods and develop their own new 3D detectors.
+Beside, there are some other attractive works extend the boundary of BEVDet. 
+* [BEVerse](https://github.com/zhangyp15/BEVerse)  for multi-task learning.
+* [BEVStereo](https://github.com/Megvii-BaseDetection/BEVStereo)  for stero depth estimation.
 
-## Projects in OpenMMLab
+## Bibtex
+If this work is helpful for your research, please consider citing the following BibTeX entry.
+```
+@article{huang2022bevdet4d,
+  title={BEVDet4D: Exploit Temporal Cues in Multi-camera 3D Object Detection},
+  author={Huang, Junjie and Huang, Guan},
+  journal={arXiv preprint arXiv:2203.17054},
+  year={2022}
+}
 
-- [MMCV](https://github.com/open-mmlab/mmcv): OpenMMLab foundational library for computer vision.
-- [MIM](https://github.com/open-mmlab/mim): MIM installs OpenMMLab packages.
-- [MMClassification](https://github.com/open-mmlab/mmclassification): OpenMMLab image classification toolbox and benchmark.
-- [MMDetection](https://github.com/open-mmlab/mmdetection): OpenMMLab detection toolbox and benchmark.
-- [MMDetection3D](https://github.com/open-mmlab/mmdetection3d): OpenMMLab's next-generation platform for general 3D object detection.
-- [MMRotate](https://github.com/open-mmlab/mmrotate): OpenMMLab rotated object detection toolbox and benchmark.
-- [MMSegmentation](https://github.com/open-mmlab/mmsegmentation): OpenMMLab semantic segmentation toolbox and benchmark.
-- [MMOCR](https://github.com/open-mmlab/mmocr): OpenMMLab text detection, recognition, and understanding toolbox.
-- [MMPose](https://github.com/open-mmlab/mmpose): OpenMMLab pose estimation toolbox and benchmark.
-- [MMHuman3D](https://github.com/open-mmlab/mmhuman3d): OpenMMLab 3D human parametric model toolbox and benchmark.
-- [MMSelfSup](https://github.com/open-mmlab/mmselfsup): OpenMMLab self-supervised learning toolbox and benchmark.
-- [MMRazor](https://github.com/open-mmlab/mmrazor): OpenMMLab model compression toolbox and benchmark.
-- [MMFewShot](https://github.com/open-mmlab/mmfewshot): OpenMMLab fewshot learning toolbox and benchmark.
-- [MMAction2](https://github.com/open-mmlab/mmaction2): OpenMMLab's next-generation action understanding toolbox and benchmark.
-- [MMTracking](https://github.com/open-mmlab/mmtracking): OpenMMLab video perception toolbox and benchmark.
-- [MMFlow](https://github.com/open-mmlab/mmflow): OpenMMLab optical flow toolbox and benchmark.
-- [MMEditing](https://github.com/open-mmlab/mmediting): OpenMMLab image and video editing toolbox.
-- [MMGeneration](https://github.com/open-mmlab/mmgeneration): OpenMMLab image and video generative models toolbox.
-- [MMDeploy](https://github.com/open-mmlab/mmdeploy): OpenMMLab model deployment framework.
+@article{huang2021bevdet,
+  title={BEVDet: High-performance Multi-camera 3D Object Detection in Bird-Eye-View},
+  author={Huang, Junjie and Huang, Guan and Zhu, Zheng and Yun, Ye and Du, Dalong},
+  journal={arXiv preprint arXiv:2112.11790},
+  year={2021}
+}
+```
