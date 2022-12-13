@@ -47,9 +47,10 @@ model = dict(
     #     out_channels=64,
     #     accelerate=False,
     # ),
-    img_view_transformer=dict(type='HeightDepthTransform',
+    img_view_transformer=dict(type='HeighTransform',
         in_channels=64,
         out_channels=64,
+        used_cameras=used_cameras,
         image_size=(540, 960),
         feature_size=(128, 240), # todo，用到了吗？
         point_cloud_range = point_cloud_range,
