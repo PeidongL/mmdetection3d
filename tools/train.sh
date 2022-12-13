@@ -15,8 +15,8 @@ function train()
 {
     PORT=30004 \
     bash tools/dist_train.sh \
-    configs/L3_data_models/pcdet_bev_fusion_height.py \
-    4 --work-dir work_dirs --extra-tag  no_proj
+    configs/L4_data_models/pcdet_L4_bev_fusion_height_48x96.py \
+    4 --work-dir work_dirs --extra-tag  debug
 }
 
 function plot_pr_curv()

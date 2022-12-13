@@ -61,7 +61,7 @@ class IHRLayer(nn.Module):
         self.num_cams = num_cams
         self.num_points = num_points
         xavier_init(self.pos_offset, distribution='uniform', bias=0.)
-        self.img_offset = nn.Linear(out_channels, num_cams * 2)
+        self.img_offset = nn.Linear(out_channels, 2 * 2)
         # constant_init(self.img_offset, 0.)
         self.attention_weights = nn.Linear(out_channels, num_cams)
         constant_init(self.attention_weights, val=0., bias=0.)
@@ -111,13 +111,28 @@ class IHRLayer(nn.Module):
         img_offset = self.img_offset(bev_queries) # B, HW, 2N
         # image_shapes=img_metas[0]['img_shape'][0]
 
-        reference_points_3d, output, bev_mask = feature_sampling(
-            inputs, reference_points, depth_prob, img_offset, point_cloud_range, lidar_to_img, img_metas)
+        if(isinstance(inputs, list)):
+            reference_points_3d, output, bev_mask = feature_sampling(
+            inputs[0], reference_points, depth_prob, img_offset, point_cloud_range, lidar_to_img[:,0:2,...], img_metas)
+            output = torch.nan_to_num(output)
+            bev_mask = torch.nan_to_num(bev_mask)
+            
+            reference_points_3d, output_side, bev_mask = feature_sampling(
+            inputs[1], reference_points, depth_prob, None, point_cloud_range, lidar_to_img[:,2:4,...], img_metas)
+            output_side = torch.nan_to_num(output_side)
+            bev_mask = torch.nan_to_num(bev_mask)
 
-        output = torch.nan_to_num(output)
-        bev_mask = torch.nan_to_num(bev_mask)
-        attention_weights = attention_weights.sigmoid()*bev_mask
-        output = output * attention_weights
+            output = torch.cat((output, output_side), -2)
+            output = output * attention_weights.sigmoid()
+        else:
+            reference_points_3d, output, bev_mask = feature_sampling(
+                inputs, reference_points, depth_prob, img_offset, point_cloud_range, lidar_to_img, img_metas)
+
+            output = torch.nan_to_num(output)
+            bev_mask = torch.nan_to_num(bev_mask)
+            attention_weights = attention_weights.sigmoid()*bev_mask
+            output = output * attention_weights
+
         #  B,C ,Nq, N, D
         # output = output.permute(0, 2, 1, 3, 4).flatten(2).permute(0, 2, 1).unsqueeze(-1)
         # output = self.stereo_consist(output).squeeze(-1)
@@ -145,6 +160,7 @@ class HeighTransform(BaseDepthTransform):
         self,
         in_channels: int,
         out_channels: int,
+        used_cameras: int,
         image_size: Tuple[int, int],
         feature_size: Tuple[int, int],
         point_cloud_range: Tuple[float, float, float, float, float, float],
@@ -173,7 +189,7 @@ class HeighTransform(BaseDepthTransform):
             in_filters = self.C
             out_filters = self.C
             ihr_layers.append(
-                IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=2)
+                IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=used_cameras)
             )
         self.ihr_layers = nn.ModuleList(ihr_layers)
         self.bev_h = bev_grid_map_size[0]
@@ -214,13 +230,22 @@ class HeighTransform(BaseDepthTransform):
     ):
         batch_size = len(points)
         num_cam = len(img_metas[0]['img_shape'])
-  
-        B, N, C, fH, fW = img_feats.shape
-        img_feat = img_feats.view(B * N, C, fH, fW)
+        if(isinstance(img_feats, list)):
+            img_feat=[]
+            for i in range(len(img_feats)):
+                B, N, C, fH, fW = img_feats[i].shape
+                img_feat_tmp = img_feats[i].view(B * N, C, fH, fW)
+                img_feat.append(img_feat_tmp)
+            dtype = img_feat_tmp.dtype
+            device = img_feat_tmp.device
+        else:  
+            B, N, C, fH, fW = img_feats.shape
+            img_feat = img_feats.view(B * N, C, fH, fW)
+            device = img_feat_tmp.device
+            dtype = img_feat.dtype
 
-        dtype = img_feat.dtype
         ref_2d = self.get_reference_points(self.bev_h, self.bev_w, 1, 
-        bs=batch_size, device=img_feat.device, dtype=dtype)
+        bs=batch_size, device=device, dtype=dtype)
         
         ref_3d = torch.cat((ref_2d, torch.ones_like(ref_2d[..., :1])*0.55), -1)
 
@@ -330,17 +355,6 @@ class HeightDepthTransform(DepthLSSTransform):
     def forward(
         self, points, img_feats, img_metas, lidar2img, lidar2camera, camera_intrinsics, **kwargs
     ):
-        camera2lidar = torch.inverse(lidar2camera)
-        rots = camera2lidar[..., :3, :3]
-        trans = camera2lidar[..., :3, 3]
-        
-        intrins = camera_intrinsics[..., :3, :3]
-        # post_rots = img_aug_matrix[..., :3, :3]
-        # post_trans = img_aug_matrix[..., :3, 3]
-
-        # extra_rots = lidar_aug_matrix[..., :3, :3]
-        # extra_trans = lidar_aug_matrix[..., :3, 3]
-
         batch_size = len(points)
         num_cam = len(img_metas[0]['img_shape'])
         depth = torch.zeros(batch_size, num_cam, 1, *self.image_size).to(points[0].device)
