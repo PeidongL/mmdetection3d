@@ -1,16 +1,19 @@
 _base_ = [
-    '../_base_/schedules/cyclic_40e.py', '../_base_/default_runtime.py'
+    '../../_base_/schedules/cyclic_40e.py', '../../_base_/default_runtime.py'
 ]
 using_tele=False
 # model settings
 voxel_size = [0.4, 0.4, 8] # 120*240
 point_cloud_range = [-24, -24, -2, 72, 24, 6]
 
+# point_cloud_range = [-25.6, -64, -2, 102.4, 64, 6]
+# voxel_size = [0.32, 0.32, 8] # 128x128  400*400
+
 use_sync_bn=True
 used_cameras = 4
 use_offline_img_feat=True
 used_sensors = {'use_lidar': True,
-               'use_camera': False,
+               'use_camera': True,
                'use_radar': False}
 grid_config = {
     'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
@@ -39,13 +42,6 @@ model = dict(
         norm_cfg=dict(type='BN', requires_grad=False),
         norm_eval=True,
         style='caffe'),
-    # img_neck=dict(type='LSSViewTransformer',
-    #     grid_config=grid_config,
-    #     feature_size=(104, 200),
-    #     in_channels=64,
-    #     out_channels=64,
-    #     accelerate=False,
-    # ),
     img_view_transformer=dict(type='LSSTransform',
         in_channels=64,
         out_channels=64,

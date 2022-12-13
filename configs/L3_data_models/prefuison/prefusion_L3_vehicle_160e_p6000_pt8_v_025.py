@@ -1,5 +1,5 @@
 _base_ = [
-    '../_base_/schedules/cyclic_40e.py', '../_base_/default_runtime.py'
+    '../../_base_/schedules/cyclic_40e.py', '../../_base_/default_runtime.py'
 ]
 
 # model settings
@@ -16,7 +16,7 @@ model = dict(
     ),
     voxel_encoder=dict(
         type='PillarFeatureNet',
-        in_channels=4,
+        in_channels=68,
         feat_channels=[64],
         with_distance=False,
         voxel_size=voxel_size,
@@ -138,7 +138,9 @@ train_pipeline = [
         with_label_3d=True,
         file_client_args=file_client_args),
     # dict(type='ObjectSample', db_sampler=db_sampler, use_ground_plane=True),
-    dict(type='RandomFlip3D', flip_ratio_bev_horizontal=0.5),
+    dict(type='LoadMultiCamImagesFromFile'),
+    dict(type='PaintPointsWithImageFeature', used_cameras=1, drop_camera_prob=0),
+    dict(type='RandomFlipLidarOnly', flip_ratio_bev_horizontal=0.5),
     dict(
         type='GlobalRotScaleTrans',
         rot_range=[-0.4, 0.4],
@@ -146,7 +148,7 @@ train_pipeline = [
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='PointShuffle'),
-    dict(type='DefaultFormatBundle3D', class_names=class_names),
+    dict(type='DefaultFormatBundleMultiCam3D', class_names=class_names),
     dict(type='Collect3D', keys=['points', 'gt_bboxes_3d', 'gt_labels_3d'])
 ]
 
@@ -158,6 +160,9 @@ test_pipeline = [
         use_dim=4,
         file_client_args=file_client_args,
         point_type='float64'),
+    dict(type='LoadMultiCamImagesFromFile'),
+    dict(type='PaintPointsWithImageFeature', used_cameras=1, drop_camera_prob=0),
+    
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1333, 800),
@@ -169,11 +174,11 @@ test_pipeline = [
                 rot_range=[0, 0],
                 scale_ratio_range=[1., 1.],
                 translation_std=[0, 0, 0]),
-            dict(type='RandomFlip3D'),
+            dict(type='RandomFlipLidarOnly'),
             dict(
                 type='PointsRangeFilter', point_cloud_range=point_cloud_range),
             dict(
-                type='DefaultFormatBundle3D',
+                type='DefaultFormatBundleMultiCam3D',
                 class_names=class_names,
                 with_label=False),
             dict(type='Collect3D', keys=['points'])
@@ -229,6 +234,7 @@ data = dict(
         classes=class_names,
         test_mode=True,
         pcd_limit_range=point_cloud_range,
+        used_cameras=1,
         box_type_3d='LiDAR',
         file_client_args=file_client_args),
     test=dict(
@@ -243,6 +249,7 @@ data = dict(
         classes=class_names,
         pcd_limit_range=point_cloud_range,
         test_mode=True,
+        used_cameras=1,
         box_type_3d='LiDAR',
         file_client_args=file_client_args))
 # In practice PointPillars also uses a different schedule

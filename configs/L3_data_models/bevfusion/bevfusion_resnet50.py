@@ -1,18 +1,18 @@
 _base_ = [
-    '../_base_/schedules/cyclic_40e.py', '../_base_/default_runtime.py'
+    '../../_base_/schedules/cyclic_40e.py', '../../_base_/default_runtime.py'
 ]
 
 # model settings
 voxel_size = [0.25, 0.25, 8]
 point_cloud_range = [0, -10, -2, 100, 10, 6]
 used_cameras=2
-use_offline_img_feat=True
-used_sensors = {'use_lidar': True,
+use_offline_img_feat=False
+used_sensors = {'use_lidar': False,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
-    'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
-    'y': [point_cloud_range[1], point_cloud_range[4], voxel_size[1]],
+    'x': [0, 100, voxel_size[0]],
+    'y': [-10, 10, voxel_size[1]],
     'z': [-10.0, 10.0, 20.0],
     'depth': [1.0, 100.0, 1],
 }
@@ -27,19 +27,29 @@ model = dict(
     used_sensors=used_sensors,
     use_offline_img_feat=use_offline_img_feat,
     img_backbone=dict(
+        pretrained='torchvision://resnet50',
         type='ResNet',
         depth=50,
+        strides=(1, 1, 2, 2),
         num_stages=4,
         out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
-        norm_cfg=dict(type='BN', requires_grad=False),
-        norm_eval=True,
-        style='caffe'),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN', requires_grad=True),
+        norm_eval=False,
+        with_cp=True,
+        style='pytorch'),
+    img_neck=dict(
+        type='FPNForBEVDet',
+        in_channels=[256, 512, 1024, 2048],
+        out_channels=64,
+        num_outs=1,
+        start_level=0,
+        out_ids=[0]),
     img_view_transformer=dict(type='LSSTransform',
         in_channels=64,
         out_channels=64,
         image_size=(540, 960),
-        feature_size=(104, 200),
+        feature_size=(135, 240),
         xbound=grid_config['x'],
         ybound=grid_config['y'],
         zbound=grid_config['z'],
@@ -63,10 +73,10 @@ model = dict(
         type='PointPillarsScatter', in_channels=64, output_shape=bev_grid_map_size),
     pts_backbone=dict(
         type='PcdetBackbone',
-        in_channels=128,
+        in_channels=64,
         layer_nums=[3, 5, 5],
         layer_strides=[2, 2, 2],
-        num_filters=[128, 128, 256],
+        num_filters=[64, 128, 256],
         upsample_strides=[1, 2, 4],
         num_upsample_filters=[128, 128, 128],
         ),
