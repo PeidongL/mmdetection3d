@@ -139,9 +139,9 @@ def main():
         # one cfg example: configs/L3_data_models/pointpillars/pointpillars_L3_vehicle_160e_p6000_pt8_v_025.py
         # using extra_tag in the cfg_file to group some exps
         data_name = osp.splitext(args.config)[0].split('/')[1]
-        exp_name = osp.splitext(os.path.basename(args.config))[0].split('_')[0]
+        # exp_name = osp.splitext(os.path.basename(args.config))[0].split('_')[0]
         # eg: /mnt/intel/jupyterhub/xxx/train_log/mm3d/  L4  /pointpillars  /single_head/  cfg_name   /time
-        cfg.work_dir = osp.join(args.work_dir, data_name, exp_name, args.extra_tag, osp.splitext(osp.basename(args.config))[0])
+        cfg.work_dir = osp.join(args.work_dir, data_name, osp.splitext(osp.basename(args.config))[0], args.extra_tag)
     elif cfg.get('work_dir', None) is None:
         # use config filename as default work_dir if cfg.work_dir is None
         work_dirs = './work_dirs/'
