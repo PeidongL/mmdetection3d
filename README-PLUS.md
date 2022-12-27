@@ -9,7 +9,8 @@ conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit
 conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge
 
 
-pip install tensorboardX
+pip install tensorboardX 
+pip install setuptools==59.5.0
 
 # following mim installation has nothing to do with cuda version
 pip install openmim
