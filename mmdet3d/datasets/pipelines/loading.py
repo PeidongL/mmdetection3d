@@ -6,7 +6,7 @@ from PIL import Image
 from pyquaternion import Quaternion
 
 import os.path as osp
-
+from torch.nn import functional as F
 from mmdet3d.core.points import BasePoints, get_points_type
 from mmdet.datasets.pipelines import LoadAnnotations, LoadImageFromFile
 from ...core.bbox import LiDARInstance3DBoxes
@@ -1349,12 +1349,16 @@ class PrepareImageInputs(object):
         is_train=False,
         sequential=False,
         ego_cam='CAM_FRONT',
+        is_plusdata=False,
+        use_offline_feature=False,
     ):
         self.is_train = is_train
         self.data_config = data_config
         self.normalize_img = mmlabNormalize
         self.sequential = sequential
         self.ego_cam = ego_cam
+        self.is_plusdata = is_plusdata
+        self.use_offline_feature = use_offline_feature
 
     def get_rot(self, h):
         return torch.Tensor([
@@ -1605,8 +1609,102 @@ class PrepareImageInputs(object):
         results['sensor2sensors'] = sensor2sensors
         return (imgs, rots, trans, intrins, post_rots, post_trans)
 
+    def resize_feature(self, out_h, out_w, in_feat):
+        new_h = torch.linspace(-1, 1, out_h).view(-1, 1).repeat(1, out_w)
+        new_w = torch.linspace(-1, 1, out_w).repeat(out_h, 1)
+        grid = torch.cat((new_h.unsqueeze(2), new_w.unsqueeze(2)), dim=2)
+        grid = grid.unsqueeze(0)
+        grid = grid.expand(in_feat.shape[0], *grid.shape[1:]).to(in_feat)
+        
+        out_feat = F.grid_sample(in_feat, grid=grid, mode='bilinear', align_corners=True)
+        
+        return out_feat
+    
+    def get_inputs_plus(self, results, flip=None, scale=None):
+        imgs = []
+        rots = []
+        trans = []
+        intrins = []
+        post_rots = []
+        post_trans = []
+        canvas = []
+        img_features = []
+        # sensor2sensors = []
+        for idx, filename in enumerate(results['img_info']):
+            lidar2cam = results['lidar2camera'][idx]
+            # filename = cam_data['data_path']
+            img = Image.open(filename)
+            if img.height == 1080:
+                half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
+                results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
+                img = img.resize((img.width//2, img.height//2))
+            post_rot = torch.eye(2)
+            post_tran = torch.zeros(2)
+
+            intrin = torch.Tensor(results['camera_intrinsics'][idx])
+            rot = torch.Tensor(lidar2cam[0:3,0:3])
+            tran = torch.Tensor(lidar2cam[0:3,3])
+            # image view augmentation (resize, crop, horizontal flip, rotate)
+            img_augs = self.sample_augmentation(
+                H=img.height, W=img.width, flip=flip, scale=scale)
+            resize, resize_dims, crop, flip, rotate = img_augs
+            img, post_rot2, post_tran2 = \
+                self.img_transform(img, post_rot,
+                                   post_tran,
+                                   resize=resize,
+                                   resize_dims=resize_dims,
+                                   crop=crop,
+                                   flip=flip,
+                                   rotate=rotate)
+
+            # for convenience, make augmentation matrices 3x3
+            post_tran = torch.zeros(3)
+            post_rot = torch.eye(3)
+            post_tran[:2] = post_tran2
+            post_rot[:2, :2] = post_rot2
+            
+            if self.use_offline_feature:
+                # clear img aug
+                post_tran = torch.zeros(3)
+                post_rot = torch.eye(3)
+
+                feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+                img_feature = torch.Tensor(np.load(feature_name))
+                if 'side_left_camera' in feature_name or 'side_right_camera' in feature_name:
+                    resized_feature = self.resize_feature(128, 240, img_feature)
+                    img_features.append(resized_feature)
+                else:  
+                    img_features.append(img_feature)
+                
+            canvas.append(np.array(img))
+            imgs.append(self.normalize_img(img))
+
+            intrins.append(intrin)
+            rots.append(rot)
+            trans.append(tran)
+            post_rots.append(post_rot)
+            post_trans.append(post_tran)
+        
+        imgs = torch.stack(imgs)
+
+        rots = torch.stack(rots)
+        trans = torch.stack(trans)
+        intrins = torch.stack(intrins)
+        post_rots = torch.stack(post_rots)
+        post_trans = torch.stack(post_trans)
+        # sensor2sensors = torch.stack(sensor2sensors)
+        results['canvas'] = canvas
+        # results['sensor2sensors'] = sensor2sensors
+        if self.use_offline_feature:
+            img_feature = torch.stack(img_features).squeeze(1)
+            return (imgs, rots, trans, intrins, post_rots, post_trans, img_feature)
+        else:
+            return (imgs, rots, trans, intrins, post_rots, post_trans)
     def __call__(self, results):
-        results['img_inputs'] = self.get_inputs(results)
+        if self.is_plusdata:
+            results['img_inputs'] = self.get_inputs_plus(results)
+        else: 
+            results['img_inputs'] = self.get_inputs(results)
         return results
 
 
@@ -1649,7 +1747,7 @@ class LoadAnnotationsBEVDepth(object):
             flip_mat = flip_mat @ torch.Tensor([[1, 0, 0], [0, -1, 0],
                                                 [0, 0, 1]])
         rot_mat = flip_mat @ (scale_mat @ rot_mat)
-        if gt_boxes.shape[0] > 0:
+        if self.is_train and gt_boxes.shape[0] > 0:
             gt_boxes[:, :3] = (
                 rot_mat @ gt_boxes[:, :3].unsqueeze(-1)).squeeze(-1)
             gt_boxes[:, 3:6] *= scale_ratio
@@ -1660,12 +1758,27 @@ class LoadAnnotationsBEVDepth(object):
                                                                            6]
             if flip_dy:
                 gt_boxes[:, 6] = -gt_boxes[:, 6]
-            gt_boxes[:, 7:] = (
-                rot_mat[:2, :2] @ gt_boxes[:, 7:].unsqueeze(-1)).squeeze(-1)
+            # gt_boxes[:, 7:] = ( # velocity
+            #     rot_mat[:2, :2] @ gt_boxes[:, 7:].unsqueeze(-1)).squeeze(-1)
         return gt_boxes, rot_mat
 
     def __call__(self, results):
-        gt_boxes, gt_labels = results['ann_infos']
+        # gt_boxes, gt_labels = results['ann_infos']
+        if not self.is_train:
+            imgs, rots, trans, intrins = results['img_inputs'][:4]
+            post_rots, post_trans = results['img_inputs'][4:6]
+            rotate_bda, scale_bda, flip_dx, flip_dy = self.sample_bda_augmentation()
+            gt_boxes, bda_rot = self.bev_transform([], rotate_bda, scale_bda,
+                                               flip_dx, flip_dy)
+            if len(results['img_inputs']) > 6:
+                results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
+                                    post_trans, bda_rot, results['img_inputs'][6])
+            else:
+                results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
+                        post_trans, bda_rot)
+            return results
+            
+        gt_boxes, gt_labels = results['ann_info']['gt_bboxes_3d'],results['ann_info']['gt_labels_3d'] 
         gt_boxes, gt_labels = torch.Tensor(gt_boxes), torch.tensor(gt_labels)
         rotate_bda, scale_bda, flip_dx, flip_dy = self.sample_bda_augmentation(
         )
@@ -1681,7 +1794,11 @@ class LoadAnnotationsBEVDepth(object):
                                  origin=(0.5, 0.5, 0.5))
         results['gt_labels_3d'] = gt_labels
         imgs, rots, trans, intrins = results['img_inputs'][:4]
-        post_rots, post_trans = results['img_inputs'][4:]
-        results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
-                                 post_trans, bda_rot)
+        post_rots, post_trans = results['img_inputs'][4:6]
+        if len(results['img_inputs']) > 6:
+            results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
+                                    post_trans, bda_rot, results['img_inputs'][6])
+        else:
+            results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
+                        post_trans, bda_rot)
         return results

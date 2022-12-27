@@ -12,14 +12,14 @@ from .centerpoint import CenterPoint
 @DETECTORS.register_module()
 class BEVDet(CenterPoint):
 
-    def __init__(self, img_view_transformer, img_bev_encoder_backbone,
+    def __init__(self, use_offline_feature, img_view_transformer, img_bev_encoder_backbone,
                  img_bev_encoder_neck, **kwargs):
         super(BEVDet, self).__init__(**kwargs)
         self.img_view_transformer = builder.build_neck(img_view_transformer)
         self.img_bev_encoder_backbone = \
             builder.build_backbone(img_bev_encoder_backbone)
         self.img_bev_encoder_neck = builder.build_neck(img_bev_encoder_neck)
-
+        self.use_offline_feature = use_offline_feature
     def image_encoder(self, img):
         imgs = img
         B, N, C, imH, imW = imgs.shape
@@ -43,7 +43,11 @@ class BEVDet(CenterPoint):
 
     def extract_img_feat(self, img, img_metas, **kwargs):
         """Extract features of images."""
-        x = self.image_encoder(img[0])
+        
+        if self.use_offline_feature:
+            x = img[7]
+        else:
+            x = self.image_encoder(img[0])
         x, depth = self.img_view_transformer([x] + img[1:7])
         x = self.bev_encoder(x)
         return [x], depth

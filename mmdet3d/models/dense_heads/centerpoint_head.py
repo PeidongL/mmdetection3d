@@ -620,7 +620,7 @@ class CenterHead(BaseModule):
                     preds_dict[0]['height'],
                     preds_dict[0]['dim'],
                     preds_dict[0]['rot'],
-                    preds_dict[0]['vel'],
+                    # preds_dict[0]['vel'],
                 ),
                 dim=1,
             )
@@ -639,8 +639,9 @@ class CenterHead(BaseModule):
             code_weights = self.train_cfg['code_weights']
             bbox_weights = mask * mask.new_tensor(code_weights)
             if self.task_specific:
-                name_list = ['xy', 'z', 'whl', 'yaw', 'vel']
-                clip_index = [0, 2, 3, 6, 8, 10]
+                # name_list = ['xy', 'z', 'whl', 'yaw', 'vel']
+                name_list = ['xy', 'z', 'whl', 'yaw']
+                clip_index = [0, 2, 3, 6, 8]
                 for reg_task_id in range(len(name_list)):
                     pred_tmp = pred[
                         ...,

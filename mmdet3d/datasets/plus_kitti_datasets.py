@@ -159,7 +159,8 @@ class PlusKittiDataset(KittiDataset):
 
         # in imu coordinates
         gt_bboxes_3d = annos['gt_boxes_lidar']
-        gt_bboxes_3d = LiDARInstance3DBoxes(gt_bboxes_3d, origin=(0.5, 0.5, 0.5))
+        # gt_bboxes_3d_raw = annos['gt_boxes_lidar']
+        # gt_bboxes_3d = LiDARInstance3DBoxes(gt_bboxes_3d, origin=(0.5, 0.5, 0.5)) # todo
         gt_bboxes = annos['bbox']  # [[1,1,1,1],...,]
 
         selected = self.drop_arrays_by_name(gt_names, ['DontCare'])
@@ -467,8 +468,8 @@ class PlusKittiDataset(KittiDataset):
                           class_names,
                           pklfile_prefix=None,
                           submission_prefix=None):
-        assert len(net_outputs) == len(self.data_infos), \
-            'invalid list length of network outputs'
+        # assert len(net_outputs) == len(self.data_infos), \
+        #     'invalid list length of network outputs'
         if submission_prefix is not None:
             mmcv.mkdir_or_exist(submission_prefix)
 
@@ -557,7 +558,8 @@ class PlusKittiDataset(KittiDataset):
         from mmdet3d.core.evaluation import get_formatted_results
         
         dets_pcdet = self.bbox2result_pcdet(results, self.CLASSES, pklfile_prefix)
-        
+        if plot_dt_result:
+                self.save_eval_results(dets_pcdet, out_dir) # todo
         # test bag 
         if bag_test_flag:
             self.save_eval_results(dets_pcdet, out_dir) # todo
@@ -588,8 +590,6 @@ class PlusKittiDataset(KittiDataset):
         if eval_result_dir is not None:
             with open(os.path.join(eval_result_dir, eval_file_name), 'w') as f:
                 f.write(result_str)
-        if plot_dt_result:
-            self.save_eval_results(dets_pcdet, out_dir) # todo
         return result_dict
     
     @staticmethod

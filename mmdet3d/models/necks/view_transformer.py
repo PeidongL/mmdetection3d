@@ -46,6 +46,7 @@ class LSSViewTransformer(BaseModule):
         self.downsample = downsample
         self.create_grid_infos(**grid_config)
         self.grid_config = grid_config
+        feature_size = (128, 240)
         self.feature_size = feature_size
         
         self.d = torch.arange(*grid_config['depth'], dtype=torch.float)\
@@ -57,6 +58,7 @@ class LSSViewTransformer(BaseModule):
             in_channels, self.D + self.out_channels, kernel_size=1, padding=0)
         self.accelerate = accelerate
         self.initial_flag = True
+        self.frustum = self.create_frustum(self.grid_config['depth'], input_size[0:2], self.feature_size)
 
     def create_grid_infos(self, x, y, z, **kwargs):
         """Generate the grid information including the lower bound, interval,
@@ -123,26 +125,15 @@ class LSSViewTransformer(BaseModule):
         B, N, _ = trans.shape
 
         # post-transformation
-        post_trans = torch.zeros(B,N,3).to(rots)
-        post_rots = torch.eye(3, 3).repeat(B,N,1,1).to(rots)
         # B x N x D x H x W x 3
-        frustums = []
-        for i in range(B):
-            single_frustums=[]
-            for img_shape in img_metas[i]['img_shape']: # 多个camera
-                single_frustum = self.create_frustum(self.grid_config['depth'], img_shape[0:2], self.feature_size)
-                single_frustums.append(single_frustum)
-            frustums.append(torch.stack(single_frustums))
-
-        frustum = torch.stack(frustums)
-        points = frustum.to(rots) - post_trans.view(B, N, 1, 1, 1, 3)
+        points = self.frustum.to(rots) - post_trans.view(B, N, 1, 1, 1, 3)
         points = torch.inverse(post_rots).view(B, N, 1, 1, 1, 3, 3)\
             .matmul(points.unsqueeze(-1))
 
         # cam_to_ego
         points = torch.cat(
             (points[..., :2, :] * points[..., 2:3, :], points[..., 2:3, :]), 5)
-        combine = rots.matmul(torch.inverse(cam2imgs))
+        combine = rots.matmul(torch.inverse(cam2imgs[:,:,0:3,0:3])) # plus dataset is 4x4, inverse will be error
         points = combine.view(B, N, 1, 1, 1, 3, 3).matmul(points).squeeze(-1)
         points += trans.view(B, N, 1, 1, 1, 3)
         points = bda.view(B, 1, 1, 1, 1, 3,
@@ -291,7 +282,7 @@ class LSSViewTransformer(BaseModule):
             self.pre_compute(input)
         return self.view_transform_core(input, depth, tran_feat)
 
-    def forward(self, img_feats, img_metas, lidar2img, lidar2camera, camera_intrinsics):
+    def forward(self, input):
         """Transform image-view feature into bird-eye-view feature.
 
         Args:
@@ -301,7 +292,7 @@ class LSSViewTransformer(BaseModule):
         Returns:
             torch.tensor: Bird-eye-view feature in shape (B, C, H_BEV, W_BEV)
         """
-        x = img_feats
+        x = input[0]
         B, N, C, H, W = x.shape
         x = x.view(B * N, C, H, W)
         x = self.depth_net(x)
