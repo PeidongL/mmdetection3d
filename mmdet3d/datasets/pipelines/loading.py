@@ -11,7 +11,7 @@ from mmdet3d.core.points import BasePoints, get_points_type
 from mmdet.datasets.pipelines import LoadAnnotations, LoadImageFromFile
 from ...core.bbox import LiDARInstance3DBoxes
 from ..builder import PIPELINES
-
+from mmdet3d.core.points.lidar_points import LiDARPoints
 
 @PIPELINES.register_module()
 class MyResize(object):
@@ -1787,6 +1787,13 @@ class LoadAnnotationsBEVDepth(object):
         gt_boxes, bda_rot = self.bev_transform(gt_boxes, rotate_bda, scale_bda,
                                                flip_dx, flip_dy)
         bda_mat[:3, :3] = bda_rot
+        
+        points = results['points'].tensor.clone()[:,0:3].unsqueeze(-1)
+        bda_points = (bda_rot @ points).squeeze(-1)
+        new_p = results['points'].tensor.clone()
+        new_p[:,:3] = bda_points
+        results['points'] = LiDARPoints(new_p, new_p.shape[-1])
+        
         if len(gt_boxes) == 0:
             gt_boxes = torch.zeros(0, 9)
         results['gt_bboxes_3d'] = \

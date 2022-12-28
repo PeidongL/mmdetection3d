@@ -7,19 +7,27 @@ from mmdet3d.ops.bev_pool_v2.bev_pool import TRTBEVPoolv2
 from mmdet.models import DETECTORS
 from .. import builder
 from .centerpoint import CenterPoint
-
+from mmdet3d.core import bbox3d2result
 
 @DETECTORS.register_module()
 class BEVDet(CenterPoint):
 
-    def __init__(self, use_offline_feature, img_view_transformer, img_bev_encoder_backbone,
-                 img_bev_encoder_neck, **kwargs):
+    def __init__(self, img_view_transformer, img_bev_encoder_backbone,
+                 img_bev_encoder_neck, use_offline_feature=False, used_sensors=None, **kwargs):
         super(BEVDet, self).__init__(**kwargs)
         self.img_view_transformer = builder.build_neck(img_view_transformer)
         self.img_bev_encoder_backbone = \
             builder.build_backbone(img_bev_encoder_backbone)
         self.img_bev_encoder_neck = builder.build_neck(img_bev_encoder_neck)
         self.use_offline_feature = use_offline_feature
+        if used_sensors is None:
+            self.use_Cam = True
+            self.use_LiDAR = False
+            self.use_Radar = False
+        else:
+            self.use_LiDAR = used_sensors.get('use_lidar', False)
+            self.use_Cam = used_sensors.get('use_camera', False)
+            self.use_Radar = used_sensors.get('use_radar', False)
     def image_encoder(self, img):
         imgs = img
         B, N, C, imH, imW = imgs.shape
@@ -50,14 +58,66 @@ class BEVDet(CenterPoint):
             x = self.image_encoder(img[0])
         x, depth = self.img_view_transformer([x] + img[1:7])
         x = self.bev_encoder(x)
-        return [x], depth
+        return x, depth
 
+    def extract_pts_feat(self, points):
+        """Extract point features."""
+        if not self.with_pts_bbox:
+            return None
+        voxels, num_points, coors = self.voxelize(points)
+        voxel_features = self.pts_voxel_encoder(
+            voxels, num_points, coors)
+        batch_size = coors[-1, 0] + 1
+        pts_feats = self.pts_middle_encoder(voxel_features, coors, batch_size) # pillar VFE
+
+        return pts_feats
+    
     def extract_feat(self, points, img, img_metas, **kwargs):
         """Extract features from images and points."""
-        img_feats, depth = self.extract_img_feat(img, img_metas, **kwargs)
-        pts_feats = None
+        if self.use_Cam:
+            img_feats, depth = self.extract_img_feat(img, img_metas, **kwargs)
+        else:
+            img_feats, depth = None, None
+        
+        if self.use_LiDAR:
+            pts_feats = self.extract_pts_feat(points)
+        else:
+            pts_feats = None
+        
         return (img_feats, pts_feats, depth)
 
+    def forward_outs(self, pts_feats, img_feats, rad_feats):
+        # featrue bev fusion
+        if self.use_LiDAR and self.use_Cam and not self.use_Radar:
+            fused_feats = torch.cat((img_feats, pts_feats), 1)
+        elif self.use_LiDAR and not self.use_Cam and not self.use_Radar:
+            fused_feats = pts_feats
+        elif not self.use_LiDAR and self.use_Cam and not self.use_Radar:
+            fused_feats = img_feats
+        else: # todo
+            fused_feats = torch.cat((img_feats, pts_feats, rad_feats), 1)
+        # fused_feats = self.fuser(fused_feats)
+        x = self.pts_backbone(fused_feats) # second FPN
+        if self.with_pts_neck:
+            x = self.pts_neck(x)
+        
+        outs = self.pts_bbox_head(x)
+        return outs
+    
+    def forward_mdfs_train(self,
+                          pts_feats,
+                          img_feats,
+                          rad_feats,
+                          gt_bboxes_3d,
+                          gt_labels_3d,
+                          img_metas,
+                          gt_bboxes_ignore=None):
+        outs = self.forward_outs(pts_feats, img_feats, rad_feats)
+        
+        loss_inputs = outs + (gt_bboxes_3d, gt_labels_3d, img_metas)
+        losses = self.pts_bbox_head.loss(
+            *loss_inputs, gt_bboxes_ignore=gt_bboxes_ignore)
+        return losses 
     def forward_train(self,
                       points=None,
                       img_metas=None,
@@ -97,10 +157,11 @@ class BEVDet(CenterPoint):
         img_feats, pts_feats, _ = self.extract_feat(
             points, img=img_inputs, img_metas=img_metas, **kwargs)
         losses = dict()
-        losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
+        rad_feats = None
+        loss_fused = self.forward_mdfs_train(pts_feats, img_feats, rad_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
                                             gt_bboxes_ignore)
-        losses.update(losses_pts)
+        losses.update(loss_fused)
         return losses
 
     def forward_test(self,
@@ -152,14 +213,25 @@ class BEVDet(CenterPoint):
                     rescale=False,
                     **kwargs):
         """Test function without augmentaiton."""
-        img_feats, _, _ = self.extract_feat(
+        img_feats, pts_feats, _ = self.extract_feat(
             points, img=img, img_metas=img_metas, **kwargs)
         bbox_list = [dict() for _ in range(len(img_metas))]
-        bbox_pts = self.simple_test_pts(img_feats, img_metas, rescale=rescale)
+        bbox_pts = self.simple_test_mdfs(pts_feats, img_feats, rad_feats=None, img_metas=img_metas, rescale=rescale)
         for result_dict, pts_bbox in zip(bbox_list, bbox_pts):
             result_dict['pts_bbox'] = pts_bbox
         return bbox_list
-
+    
+    def simple_test_mdfs(self, pts_feats, img_feats, rad_feats, img_metas, rescale=False):
+        """Test function of point cloud branch."""
+        outs = self.forward_outs(pts_feats, img_feats, rad_feats)
+        bbox_list = self.pts_bbox_head.get_bboxes(
+            *outs, img_metas, rescale=rescale)
+        bbox_results = [
+            bbox3d2result(bboxes, scores, labels)
+            for bboxes, scores, labels in bbox_list
+        ]
+        return bbox_results
+    
     def forward_dummy(self,
                       points=None,
                       img_metas=None,
