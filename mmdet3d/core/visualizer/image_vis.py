@@ -30,12 +30,14 @@ def project_pts_on_img(points,
 
     # cam_points is Tensor of Nx4 whose last column is 1
     # transform camera coordinate to image coordinate
+    valid_depth = pts_2d[:, 2] > 0
     pts_2d[:, 2] = np.clip(pts_2d[:, 2], a_min=1e-5, a_max=99999)
     pts_2d[:, 0] /= pts_2d[:, 2]
     pts_2d[:, 1] /= pts_2d[:, 2]
 
     fov_inds = ((pts_2d[:, 0] < img.shape[1])
                 & (pts_2d[:, 0] >= 0)
+                & valid_depth
                 & (pts_2d[:, 1] < img.shape[0])
                 & (pts_2d[:, 1] >= 0))
 
@@ -54,8 +56,9 @@ def project_pts_on_img(points,
             color=tuple(color),
             thickness=thickness,
         )
-    cv2.imshow('project_pts_img', img.astype(np.uint8))
-    cv2.waitKey(100)
+    return img
+    # cv2.imshow('project_pts_img', img.astype(np.uint8))
+    # cv2.waitKey(100)
 
 
 def plot_rect3d_on_img(img,

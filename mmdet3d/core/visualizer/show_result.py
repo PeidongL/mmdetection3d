@@ -4,9 +4,12 @@ from os import path as osp
 import mmcv
 import numpy as np
 import trimesh
+import cv2
+from mmcv.parallel import DataContainer
+import torch
 
 from .image_vis import (draw_camera_bbox3d_on_img, draw_depth_bbox3d_on_img,
-                        draw_lidar_bbox3d_on_img)
+                        draw_lidar_bbox3d_on_img, project_pts_on_img)
 
 
 def _write_obj(points, out_filename):
@@ -291,7 +294,7 @@ def show_multi_modality_result(img,
         mmcv.imwrite(pred_img, osp.join(result_path, f'{filename}_pred.png'))
 
 
-def show_multi_cams_modality_result(img,
+def show_plus_multi_cams_result(input, img,
                                     gt_bboxes,
                                     pred_bboxes,
                                     proj_mat,
@@ -301,12 +304,25 @@ def show_multi_cams_modality_result(img,
                                     show=False,
                                     gt_bbox_color=(61, 102, 255),
                                     pred_bbox_color=(241, 101, 72)):
-    import cv2
+    if isinstance(input['points'], DataContainer):
+        points = input['points'].data.numpy()
+        
+    else:  
+        points = input['points'].tensor.numpy()
+    
+    
     draw_bbox = draw_lidar_bbox3d_on_img
     cam_nums = len(filename)
     camera_names = ['front_left_camera', 'front_right_camera',
                     'side_left_camera', 'side_right_camera',
                     'rear_left_camera', 'rear_right_camera']
+    front_image_size = (960, 540)
+    side_image_size = (960, 540)
+    new_size = (front_image_size[0]+side_image_size[0], 
+                front_image_size[1]+side_image_size[1])
+    new_img = np.zeros((new_size[1], new_size[0], 3), np.uint8)
+    
+    show_img_list = []
     for idx in range(cam_nums):
         this_img = img[idx]
         this_mat = proj_mat[idx]
@@ -329,10 +345,14 @@ def show_multi_cams_modality_result(img,
                     this_mat,
                     img_metas,
                     color=pred_bbox_color)
+                
+            show_img = project_pts_on_img(points, show_img, input['lidar2img'][idx])
+            
             cv2.putText(show_img, f"{camera_name}", (15, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                         fontScale=1.0, color=(0, 0, 255), thickness=2)
-            mmcv.imshow(show_img, win_name='project_bbox3d_img', wait_time=0)
-
+            # mmcv.imshow(show_img, win_name='project_bbox3d_img', wait_time=0)
+            show_img_list.append(show_img)
+ 
         if this_img is not None:
             mmcv.imwrite(this_img, osp.join(result_path, f'{this_filename}_img.png'))
 
@@ -345,3 +365,95 @@ def show_multi_cams_modality_result(img,
             pred_img = draw_bbox(
                 pred_bboxes, this_img, this_mat, img_metas, color=pred_bbox_color)
             mmcv.imwrite(pred_img, osp.join(result_path, f'{this_filename}_pred.png'))
+            
+    new_img[0:540, 0:960] = show_img_list[0]
+    new_img[0:540, 960:1920] = show_img_list[0]
+    
+    new_img[540:1080,0:960] = show_img_list[2]
+    new_img[540:1080,960:1920] = show_img_list[3]
+    # img[front_image_size[1]:new_size[1], side_left_offset_x+side_image_size[0]:side_left_offset_x+side_image_size[0]*2] = img_side_right
+    mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)    
+    
+
+def show_plus_bevdet20_format_project_bbox_mutlicam(input,
+                      gt_bbox_color=(61, 102, 255),
+                      pred_bbox_color=(241, 101, 72)):
+    if isinstance(input['points'], DataContainer):
+        points = input['points'].data.numpy()
+    else:  
+        points = input['points'].tensor.numpy()
+    
+    gt_bboxes = input['gt_bboxes_3d']
+     
+    (imgs, rots, trans, intrins, post_rots,
+        post_trans, bda_rot, img_feature) = input['img_inputs']
+    
+    draw_bbox = draw_lidar_bbox3d_on_img
+    cam_nums = len(imgs)
+    camera_names = ['front_left_camera', 'front_right_camera',
+                    'side_left_camera', 'side_right_camera',
+                    'rear_left_camera', 'rear_right_camera']
+    front_image_size = (960, 540)
+    side_image_size = (960, 540)
+    new_size = (front_image_size[0]+side_image_size[0], 
+                front_image_size[1]+side_image_size[1])
+    new_img = np.zeros((new_size[1], new_size[0], 3), np.uint8)
+    
+    show_img_list = []
+    for idx in range(cam_nums):
+        this_img = imgs[idx].permute(1, 2, 0).contiguous()
+        
+        bda_M = torch.from_numpy(np.eye(4, dtype=np.float32))
+        bda_M[:3,:3] = bda_rot
+        
+        cam2img = np.eye(4, dtype=np.float32)
+        cam2img = torch.from_numpy(cam2img)
+        cam2img = intrins[idx]
+        lidar2cam = torch.from_numpy(np.eye(4, dtype=np.float32))
+        lidar2cam[:3,:3]=rots[idx]
+        lidar2cam[:3,3]=trans[idx]
+        lidar2img = cam2img.matmul(lidar2cam.matmul(bda_M.inverse()))
+        
+        # result_path = osp.join(out_dir, this_filename)
+        # mmcv.mkdir_or_exist(result_path)
+
+        camera_name = camera_names[idx]
+        show_img = this_img.numpy()
+        
+        show_img = draw_bbox(
+                gt_bboxes, show_img, lidar2img.numpy(), None, color=gt_bbox_color)
+        
+        show_img = project_pts_on_img(points, show_img, lidar2img.numpy())
+        
+        cv2.putText(show_img, f"{camera_name}", (15, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+                    fontScale=1.0, color=(0, 0, 255), thickness=2)
+        # mmcv.imshow(show_img, win_name='project_bbox3d_img', wait_time=0)
+        show_img_list.append(show_img)
+ 
+        # if this_img is not None:
+        #     mmcv.imwrite(this_img, osp.join(result_path, f'{this_filename}_img.png'))
+
+        # if gt_bboxes is not None:
+        #     gt_img = draw_bbox(
+        #         gt_bboxes, this_img, this_mat, img_metas, color=gt_bbox_color)
+        #     mmcv.imwrite(gt_img, osp.join(result_path, f'{this_filename}_gt.png'))
+
+        # if pred_bboxes is not None:
+        #     pred_img = draw_bbox(
+        #         pred_bboxes, this_img, this_mat, img_metas, color=pred_bbox_color)
+        #     mmcv.imwrite(pred_img, osp.join(result_path, f'{this_filename}_pred.png'))
+            
+    new_img[0:540, 0:960] = show_img_list[0]
+    new_img[0:540, 960:1920] = show_img_list[0]
+    
+    new_img[540:1080,0:960] = show_img_list[2]
+    new_img[540:1080,960:1920] = show_img_list[3]
+    # img[front_image_size[1]:new_size[1], side_left_offset_x+side_image_size[0]:side_left_offset_x+side_image_size[0]*2] = img_side_right
+    mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)
+    
+    
+    
+    
+    
+    
+    

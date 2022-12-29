@@ -2,7 +2,7 @@
 from .compose import Compose
 from .dbsampler import DataBaseSampler
 from .formating import Collect3D, DefaultFormatBundle, DefaultFormatBundle3D, DefaultFormatBundleMultiCam3D
-from .loading import (LoadAnnotations3D, LoadAnnotationsBEVDepth,
+from .loading import (LoadAnnotations3D, LoadAnnotationsBEVDepth, LoadAnnotationsBEVDepth_Plus,
                       LoadImageFromFileMono3D, LoadMultiViewImageFromFiles,
                       LoadPointsFromDict, LoadPointsFromFile,
                       LoadPointsFromMultiSweeps, NormalizePointsColor,
@@ -37,5 +37,5 @@ __all__ = [
     'LoadPointsFromDict', 'MultiViewWrapper', 'RandomRotate',
     'RangeLimitedRandomCrop', 'DefaultFormatBundleMultiCam3D', 'LoadMultiCamImagesFromFile',
     'PaintPointsWithImageFeature', 'RandomFlipLidarOnly',
-    'PrepareImageInputs', 'LoadAnnotationsBEVDepth', 'PointToMultiViewDepth'
+    'PrepareImageInputs', 'LoadAnnotationsBEVDepth', 'PointToMultiViewDepth', 'LoadAnnotationsBEVDepth_Plus'
 ]

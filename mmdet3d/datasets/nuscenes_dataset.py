@@ -238,6 +238,8 @@ class NuScenesDataset(Custom3DDataset):
             sweeps=info['sweeps'],
             timestamp=info['timestamp'] / 1e6,
         )
+        annos = self.get_ann_info(index)
+        input_dict['ann_info'] = annos
         if 'ann_infos' in info:
             input_dict['ann_infos'] = info['ann_infos']
         if self.modality['use_camera']:
@@ -327,10 +329,10 @@ class NuScenesDataset(Custom3DDataset):
 
         # the nuscenes box center is [0.5, 0.5, 0.5], we change it to be
         # the same as KITTI (0.5, 0.5, 0)
-        gt_bboxes_3d = LiDARInstance3DBoxes(
-            gt_bboxes_3d,
-            box_dim=gt_bboxes_3d.shape[-1],
-            origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
+        # gt_bboxes_3d = LiDARInstance3DBoxes(
+        #     gt_bboxes_3d,
+        #     box_dim=gt_bboxes_3d.shape[-1],
+        #     origin=(0.5, 0.5, 0.5)).convert_to(self.box_mode_3d)
 
         anns_results = dict(
             gt_bboxes_3d=gt_bboxes_3d,

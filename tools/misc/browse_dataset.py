@@ -6,15 +6,17 @@ from pathlib import Path
 
 import mmcv
 import numpy as np
+from mmcv.parallel import DataContainer
+
 from mmcv import Config, DictAction, mkdir_or_exist
 
 from mmdet3d.core.bbox import (Box3DMode, CameraInstance3DBoxes, Coord3DMode,
                                DepthInstance3DBoxes, LiDARInstance3DBoxes)
 from mmdet3d.core.visualizer import (show_multi_modality_result, show_result,
-                                     show_seg_result, show_multi_cams_modality_result)
+                                     show_seg_result, show_plus_multi_cams_result)
 from mmdet3d.datasets import build_dataset
 
-
+from mmdet3d.core.visualizer.show_result import show_plus_bevdet20_format_project_bbox_mutlicam
 def parse_args():
     parser = argparse.ArgumentParser(description='Browse a dataset')
     parser.add_argument('config', help='train config file path')
@@ -107,8 +109,13 @@ def to_depth_mode(points, bboxes):
 def show_det_data(input, out_dir, show=False):
     """Visualize 3D point cloud and 3D bboxes."""
     img_metas = input['img_metas']._data
-    points = input['points']._data.numpy()
-    gt_bboxes = input['gt_bboxes_3d']._data.tensor
+    if isinstance(input['points'], DataContainer):
+        points = input['points'].data.numpy()
+        gt_bboxes = input['gt_bboxes_3d'].data.tensor
+        
+    else:  
+        points = input['points'].tensor.numpy()
+        gt_bboxes = input['gt_bboxes_3d'].tensor
     # if img_metas['box_mode_3d'] != Box3DMode.DEPTH:
     #     points, gt_bboxes = to_depth_mode(points, gt_bboxes)
     filename = osp.splitext(osp.basename(img_metas['pts_filename']))[0]
@@ -192,24 +199,26 @@ def show_proj_bbox_img(input, out_dir, show=False, is_nus_mono=False):
             img, None, None, None, out_dir, filename, show=show)
 
 
-def show_proj_bbox_mutlicam(input, out_dir, show=False):
+def show_plus_project_bbox_mutlicam(input, out_dir, show=False):
     """Visualize 3D bboxes on 2D image by projection."""
-    gt_bboxes = input['gt_bboxes_3d'].data
+    gt_bboxes = input['gt_bboxes_3d']
+    if type(gt_bboxes) is np.ndarray:
+        gt_bboxes = LiDARInstance3DBoxes(gt_bboxes, origin=(0.5, 0.5, 0.5)) # todo
+        
     img_metas = input['img_metas'].data
 
     img_list = []
     Tr_list = []
     filename_list = []
     for img, tr, filename in zip(input['img'], img_metas['lidar2img'], img_metas['filename']):
-        this_img = img.data.numpy()
-        this_img = this_img.transpose(1, 2, 0)
+        this_img = img
         this_filename = Path(filename).name
 
         img_list.append(this_img)
         Tr_list.append(tr)
         filename_list.append(this_filename)
-
-    show_multi_cams_modality_result(img_list,
+        
+    show_plus_multi_cams_result(input, img_list,
                                     gt_bboxes,
                                     None,
                                     Tr_list,
@@ -253,7 +262,10 @@ def main():
             # show 3D segmentation mask on 3D point clouds
             show_seg_data(input, args.output_dir, show=args.online)
         elif vis_task in ['plus-det']:
-            show_proj_bbox_mutlicam(
+            if 'img_inputs' in input:
+                show_plus_bevdet20_format_project_bbox_mutlicam(input)
+            else: 
+                show_plus_project_bbox_mutlicam(
                 input,
                 args.output_dir,
                 show=args.online)

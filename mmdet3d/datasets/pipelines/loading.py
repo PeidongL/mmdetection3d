@@ -1237,6 +1237,8 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
                     f"channel_order='{self.channel_order}', "
                     f'file_client_args={self.file_client_args})')
         return repr_str
+
+@PIPELINES.register_module()
 class PointToMultiViewDepth(object):
 
     def __init__(self, grid_config, downsample=1):
@@ -1516,10 +1518,12 @@ class PrepareImageInputs(object):
         results['cam_names'] = cam_names
         canvas = []
         sensor2sensors = []
+        raw_imgs = []
         for cam_name in cam_names:
             cam_data = results['curr']['cams'][cam_name]
             filename = cam_data['data_path']
             img = Image.open(filename)
+            raw_imgs.append(torch.tensor(np.array(img)).float().permute(2, 0, 1).contiguous())
             post_rot = torch.eye(2)
             post_tran = torch.zeros(2)
 
@@ -1605,7 +1609,8 @@ class PrepareImageInputs(object):
         post_rots = torch.stack(post_rots)
         post_trans = torch.stack(post_trans)
         sensor2sensors = torch.stack(sensor2sensors)
-        results['canvas'] = canvas
+        results['canvas'] = canvas # aug raw img
+        results['raw_img'] = raw_imgs
         results['sensor2sensors'] = sensor2sensors
         return (imgs, rots, trans, intrins, post_rots, post_trans)
 
@@ -1629,6 +1634,8 @@ class PrepareImageInputs(object):
         post_trans = []
         canvas = []
         img_features = []
+        raw_imgs = []
+        
         # sensor2sensors = []
         for idx, filename in enumerate(results['img_info']):
             lidar2cam = results['lidar2camera'][idx]
@@ -1638,6 +1645,9 @@ class PrepareImageInputs(object):
                 half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
                 results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
                 img = img.resize((img.width//2, img.height//2))
+            
+            raw_imgs.append(torch.tensor(np.array(img)).float().permute(2, 0, 1).contiguous())
+            
             post_rot = torch.eye(2)
             post_tran = torch.zeros(2)
 
@@ -1707,9 +1717,96 @@ class PrepareImageInputs(object):
             results['img_inputs'] = self.get_inputs(results)
         return results
 
-
 @PIPELINES.register_module()
 class LoadAnnotationsBEVDepth(object):
+
+    def __init__(self, bda_aug_conf, classes, is_train=True):
+        self.bda_aug_conf = bda_aug_conf
+        self.is_train = is_train
+        self.classes = classes
+
+    def sample_bda_augmentation(self):
+        """Generate bda augmentation values based on bda_config."""
+        if self.is_train:
+            rotate_bda = np.random.uniform(*self.bda_aug_conf['rot_lim'])
+            scale_bda = np.random.uniform(*self.bda_aug_conf['scale_lim'])
+            flip_dx = np.random.uniform() < self.bda_aug_conf['flip_dx_ratio']
+            flip_dy = np.random.uniform() < self.bda_aug_conf['flip_dy_ratio']
+        else:
+            rotate_bda = 0
+            scale_bda = 1.0
+            flip_dx = False
+            flip_dy = False
+        return rotate_bda, scale_bda, flip_dx, flip_dy
+
+    def bev_transform(self, gt_boxes, rotate_angle, scale_ratio, flip_dx,
+                      flip_dy):
+        rotate_angle = torch.tensor(rotate_angle / 180 * np.pi)
+        rot_sin = torch.sin(rotate_angle)
+        rot_cos = torch.cos(rotate_angle)
+        rot_mat = torch.Tensor([[rot_cos, -rot_sin, 0], [rot_sin, rot_cos, 0],
+                                [0, 0, 1]])
+        scale_mat = torch.Tensor([[scale_ratio, 0, 0], [0, scale_ratio, 0],
+                                  [0, 0, scale_ratio]])
+        flip_mat = torch.Tensor([[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+        if flip_dx:
+            flip_mat = flip_mat @ torch.Tensor([[-1, 0, 0], [0, 1, 0],
+                                                [0, 0, 1]])
+        if flip_dy:
+            flip_mat = flip_mat @ torch.Tensor([[1, 0, 0], [0, -1, 0],
+                                                [0, 0, 1]])
+        rot_mat = flip_mat @ (scale_mat @ rot_mat)
+        if gt_boxes.shape[0] > 0:
+            gt_boxes[:, :3] = (
+                rot_mat @ gt_boxes[:, :3].unsqueeze(-1)).squeeze(-1)
+            gt_boxes[:, 3:6] *= scale_ratio
+            gt_boxes[:, 6] += rotate_angle
+            if flip_dx:
+                gt_boxes[:,
+                         6] = 2 * torch.asin(torch.tensor(1.0)) - gt_boxes[:,
+                                                                           6]
+            if flip_dy:
+                gt_boxes[:, 6] = -gt_boxes[:, 6]
+            gt_boxes[:, 7:] = (
+                rot_mat[:2, :2] @ gt_boxes[:, 7:].unsqueeze(-1)).squeeze(-1)
+        return gt_boxes, rot_mat
+
+    def __call__(self, results):
+        # bevdet2.0
+        # gt_boxes, gt_labels = results['ann_infos']
+        # bevdet 1.0
+        gt_boxes, gt_labels = results['ann_info']['gt_bboxes_3d'],results['ann_info']['gt_labels_3d'] 
+        
+        gt_boxes, gt_labels = torch.Tensor(gt_boxes), torch.tensor(gt_labels)
+        rotate_bda, scale_bda, flip_dx, flip_dy = self.sample_bda_augmentation(
+        )
+        bda_mat = torch.zeros(4, 4)
+        bda_mat[3, 3] = 1
+        gt_boxes, bda_rot = self.bev_transform(gt_boxes, rotate_bda, scale_bda,
+                                               flip_dx, flip_dy)
+        bda_mat[:3, :3] = bda_rot
+        
+        if 'points' in results:
+            points = results['points'].tensor.clone()[:,0:3].unsqueeze(-1)
+            bda_points = (bda_rot @ points).squeeze(-1)
+            new_p = results['points'].tensor.clone()
+            new_p[:,:3] = bda_points
+            results['points'] = LiDARPoints(new_p, new_p.shape[-1])
+            
+        if len(gt_boxes) == 0:
+            gt_boxes = torch.zeros(0, 9)
+        results['gt_bboxes_3d'] = \
+            LiDARInstance3DBoxes(gt_boxes, box_dim=gt_boxes.shape[-1],
+                                 origin=(0.5, 0.5, 0.5))
+        results['gt_labels_3d'] = gt_labels
+        imgs, rots, trans, intrins = results['img_inputs'][:4]
+        post_rots, post_trans = results['img_inputs'][4:]
+        results['img_inputs'] = (imgs, rots, trans, intrins, post_rots,
+                                 post_trans, bda_rot)
+        return results
+
+@PIPELINES.register_module()
+class LoadAnnotationsBEVDepth_Plus(object):
 
     def __init__(self, bda_aug_conf, classes, is_train=True):
         self.bda_aug_conf = bda_aug_conf
@@ -1763,7 +1860,6 @@ class LoadAnnotationsBEVDepth(object):
         return gt_boxes, rot_mat
 
     def __call__(self, results):
-        # gt_boxes, gt_labels = results['ann_infos']
         if not self.is_train:
             imgs, rots, trans, intrins = results['img_inputs'][:4]
             post_rots, post_trans = results['img_inputs'][4:6]
@@ -1788,11 +1884,12 @@ class LoadAnnotationsBEVDepth(object):
                                                flip_dx, flip_dy)
         bda_mat[:3, :3] = bda_rot
         
-        points = results['points'].tensor.clone()[:,0:3].unsqueeze(-1)
-        bda_points = (bda_rot @ points).squeeze(-1)
-        new_p = results['points'].tensor.clone()
-        new_p[:,:3] = bda_points
-        results['points'] = LiDARPoints(new_p, new_p.shape[-1])
+        if 'points' in results:
+            points = results['points'].tensor.clone()[:,0:3].unsqueeze(-1)
+            bda_points = (bda_rot @ points).squeeze(-1)
+            new_p = results['points'].tensor.clone()
+            new_p[:,:3] = bda_points
+            results['points'] = LiDARPoints(new_p, new_p.shape[-1])
         
         if len(gt_boxes) == 0:
             gt_boxes = torch.zeros(0, 9)
