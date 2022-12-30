@@ -242,6 +242,8 @@ train_pipeline = [
         type='LoadAnnotationsBEVDepth_Plus',
         bda_aug_conf=bda_aug_conf,
         classes=class_names),
+    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='PointShuffle'),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
