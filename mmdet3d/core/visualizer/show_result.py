@@ -383,28 +383,47 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
     else:  
         points = input['points'].tensor.numpy()
     
-    gt_bboxes = input['gt_bboxes_3d']
+    if isinstance(input['gt_bboxes_3d'], DataContainer):
+        gt_bboxes = input['gt_bboxes_3d'].data
+    else:   
+        gt_bboxes = input['gt_bboxes_3d']
      
-    (imgs, rots, trans, intrins, post_rots,
-        post_trans, bda_rot, img_feature) = input['img_inputs']
+    raw_imgs = input['raw_img']
+    canvas = input['canvas']
+    # show_imgs = raw_imgs
+    show_imgs = canvas
+    
+    if len(input['img_inputs']) > 7:
+        (imgs, rots, trans, intrins, post_rots,
+            post_trans, bda_rot, img_feature) = input['img_inputs']
+    else:
+        (imgs, rots, trans, intrins, post_rots,
+        post_trans, bda_rot) = input['img_inputs']
     
     draw_bbox = draw_lidar_bbox3d_on_img
-    cam_nums = len(imgs)
+    cam_nums = len(show_imgs)
     camera_names = ['front_left_camera', 'front_right_camera',
                     'side_left_camera', 'side_right_camera',
                     'rear_left_camera', 'rear_right_camera']
-    front_image_size = (960, 540)
-    side_image_size = (960, 540)
-    new_size = (front_image_size[0]+side_image_size[0], 
+    front_image_size = (canvas[0].shape[1], canvas[0].shape[0]) # width * height: 960*540
+    side_image_size = (canvas[2].shape[1], canvas[2].shape[0])
+    new_size = (front_image_size[0]+side_image_size[0],  # 1920*1080
                 front_image_size[1]+side_image_size[1])
     new_img = np.zeros((new_size[1], new_size[0], 3), np.uint8)
     
     show_img_list = []
     for idx in range(cam_nums):
-        this_img = imgs[idx].permute(1, 2, 0).contiguous()
+        show_img = show_imgs[idx]
+        if type(show_img) == torch.Tensor: # raw_img, not canvas
+            show_img = show_img.permute(1, 2, 0).contiguous().numpy()
         
         bda_M = torch.from_numpy(np.eye(4, dtype=np.float32))
         bda_M[:3,:3] = bda_rot
+        
+        # 图像增强矩阵
+        post_M = torch.from_numpy(np.eye(4, dtype=np.float32))
+        post_M[:3,:3] = post_rots[idx]
+        post_M[:3,3] = post_trans[idx]
         
         cam2img = np.eye(4, dtype=np.float32)
         cam2img = torch.from_numpy(cam2img)
@@ -413,17 +432,17 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
         lidar2cam[:3,:3]=rots[idx]
         lidar2cam[:3,3]=trans[idx]
         lidar2img = cam2img.matmul(lidar2cam.matmul(bda_M.inverse()))
-        
+        # lidar2img = post_M.inverse().matmul(cam2img)
         # result_path = osp.join(out_dir, this_filename)
         # mmcv.mkdir_or_exist(result_path)
 
         camera_name = camera_names[idx]
-        show_img = this_img.numpy()
         
-        show_img = draw_bbox(
-                gt_bboxes, show_img, lidar2img.numpy(), None, color=gt_bbox_color)
+        show_img = draw_lidar_bbox3d_on_img(
+                gt_bboxes, show_img, lidar2img.numpy(), post_M, color=gt_bbox_color)
         
-        show_img = project_pts_on_img(points, show_img, lidar2img.numpy())
+        if idx == 0:
+            show_img = project_pts_on_img(points, show_img, lidar2img.numpy(), post_M)
         
         cv2.putText(show_img, f"{camera_name}", (15, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale=1.0, color=(0, 0, 255), thickness=2)
@@ -443,11 +462,11 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
         #         pred_bboxes, this_img, this_mat, img_metas, color=pred_bbox_color)
         #     mmcv.imwrite(pred_img, osp.join(result_path, f'{this_filename}_pred.png'))
             
-    new_img[0:540, 0:960] = show_img_list[0]
-    new_img[0:540, 960:1920] = show_img_list[0]
+    new_img[0:front_image_size[1], 0:front_image_size[0]] = show_img_list[0]
+    new_img[0:front_image_size[1], front_image_size[0]:new_size[0]] = show_img_list[1]
     
-    new_img[540:1080,0:960] = show_img_list[2]
-    new_img[540:1080,960:1920] = show_img_list[3]
+    new_img[front_image_size[1]:new_size[1],0:front_image_size[0]] = show_img_list[2]
+    new_img[front_image_size[1]:new_size[1],front_image_size[0]:new_size[0]] = show_img_list[3]
     # img[front_image_size[1]:new_size[1], side_left_offset_x+side_image_size[0]:side_left_offset_x+side_image_size[0]*2] = img_side_right
     mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)
     

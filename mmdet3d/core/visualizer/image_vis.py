@@ -10,6 +10,7 @@ from matplotlib import pyplot as plt
 def project_pts_on_img(points,
                        raw_img,
                        lidar2img_rt,
+                       img_post_rt,
                        max_distance=70,
                        thickness=-1):
     """Project the 3D points cloud on 2D image.
@@ -43,9 +44,14 @@ def project_pts_on_img(points,
 
     imgfov_pts_2d = pts_2d[fov_inds, :3]  # u, v, d
 
+    imgfov_pts_2d = np.concatenate([imgfov_pts_2d, np.ones((imgfov_pts_2d.shape[0], 1))], axis=-1)
+    imgfov_pts_2d = imgfov_pts_2d @ img_post_rt.T.numpy()
+    
     cmap = plt.cm.get_cmap('hsv', 256)
     cmap = np.array([cmap(i) for i in range(256)])[:, :3] * 255
     for i in range(imgfov_pts_2d.shape[0]):
+        # if i % 10 !=0:
+        #     continue
         depth = imgfov_pts_2d[i, 2]
         color = cmap[np.clip(int(max_distance * 10 / depth), 0, 255), :]
         cv2.circle(
@@ -92,7 +98,7 @@ def plot_rect3d_on_img(img,
 def draw_lidar_bbox3d_on_img(bboxes3d,
                              raw_img,
                              lidar2img_rt,
-                             img_metas,
+                             img_post_rt,
                              color=(0, 255, 0),
                              thickness=1):
     """Project the 3D bbox on 2D plane and draw on input image.
@@ -143,7 +149,12 @@ def draw_lidar_bbox3d_on_img(bboxes3d,
         valid_box.append(this_pts_2d[:, :2])
 
     if valid_box_num > 0:
-        valid_box = np.concatenate(valid_box, axis=0).reshape(valid_box_num, 8, 2)
+        valid_box = np.concatenate(valid_box, axis=0)
+        valid_box = np.concatenate([valid_box, np.ones((valid_box.shape[0], 2))], axis=-1)
+        valid_box = valid_box @ img_post_rt.T.numpy()
+        valid_box = valid_box[:,:2]
+        
+        valid_box = valid_box.reshape(valid_box_num, 8, 2)
 
     return plot_rect3d_on_img(img, valid_box_num, valid_box, color, thickness)
 

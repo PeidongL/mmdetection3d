@@ -168,21 +168,21 @@ train_pipeline = [
         data_config=data_config,
         sequential=True),
     dict(
-        type='LoadAnnotationsBEVDepth',
-        bda_aug_conf=bda_aug_conf,
-        classes=class_names),
-    dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=5,
         use_dim=5,
         file_client_args=file_client_args),
+    dict(
+        type='LoadAnnotationsBEVDepth',
+        bda_aug_conf=bda_aug_conf,
+        classes=class_names),
     dict(type='PointToMultiViewDepth', downsample=1, grid_config=grid_config),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(
-        type='Collect3D', keys=['img_inputs', 'gt_bboxes_3d', 'gt_labels_3d',
+        type='Collect3D', keys=['img_inputs', 'points', 'gt_bboxes_3d', 'gt_labels_3d',
                                 'gt_depth'])
 ]
 

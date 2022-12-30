@@ -11,7 +11,7 @@ point_cloud_range = [-24, -24, -2, 72, 24, 6]
 
 use_sync_bn=True # set Fasle when debug
 used_cameras = 4
-use_offline_img_feat=True
+use_offline_img_feat=False
 offline_feature_resize_shape=(72, 120)
 used_sensors = {'use_lidar': True,
                'use_camera': True,
@@ -35,7 +35,7 @@ data_config = {
     ],
     'Ncams':
     4,
-    'input_size': (256, 704),
+    'input_size': (540, 960),
     'src_size': (540, 960),
 
     # Augmentation
@@ -231,7 +231,7 @@ train_pipeline = [
         is_train=True, 
         data_config=data_config,
         is_plusdata=True,
-        use_offline_feature=True,
+        use_offline_feature=use_offline_img_feat,
         offline_feature_resize_shape=offline_feature_resize_shape),
     dict(
         type='LoadPointsFromFile',
@@ -245,17 +245,19 @@ train_pipeline = [
         type='LoadAnnotationsBEVDepth_Plus',
         bda_aug_conf=bda_aug_conf,
         classes=class_names),
+    # dict(type='PointToMultiViewDepth_Plus', downsample=1, grid_config=grid_config),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='PointShuffle'),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectNameFilter', classes=class_names),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(
-        type='Collect3D', keys=['img_inputs','points', 'gt_bboxes_3d', 'gt_labels_3d'])
+        type='Collect3D', keys=['img_inputs','points', 'gt_bboxes_3d', 'gt_labels_3d', 'raw_img', 'canvas'])
 ]
 
 test_pipeline = [
-    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=True),
+    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=True,
+         offline_feature_resize_shape=offline_feature_resize_shape),
     dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',

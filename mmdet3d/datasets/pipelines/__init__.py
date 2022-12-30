@@ -6,7 +6,7 @@ from .loading import (LoadAnnotations3D, LoadAnnotationsBEVDepth, LoadAnnotation
                       LoadImageFromFileMono3D, LoadMultiViewImageFromFiles,
                       LoadPointsFromDict, LoadPointsFromFile,
                       LoadPointsFromMultiSweeps, NormalizePointsColor,
-                      PointSegClassMapping, PointToMultiViewDepth,
+                      PointSegClassMapping, PointToMultiViewDepth, PointToMultiViewDepth_Plus,
                       PrepareImageInputs,
                       LoadMultiCamImagesFromFile)
 from .test_time_aug import MultiScaleFlipAug3D
@@ -37,5 +37,6 @@ __all__ = [
     'LoadPointsFromDict', 'MultiViewWrapper', 'RandomRotate',
     'RangeLimitedRandomCrop', 'DefaultFormatBundleMultiCam3D', 'LoadMultiCamImagesFromFile',
     'PaintPointsWithImageFeature', 'RandomFlipLidarOnly',
-    'PrepareImageInputs', 'LoadAnnotationsBEVDepth', 'PointToMultiViewDepth', 'LoadAnnotationsBEVDepth_Plus'
+    'PrepareImageInputs', 'LoadAnnotationsBEVDepth', 'PointToMultiViewDepth',
+    'PointToMultiViewDepth_Plus', 'LoadAnnotationsBEVDepth_Plus'
 ]

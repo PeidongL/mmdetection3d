@@ -1323,6 +1323,66 @@ class PointToMultiViewDepth(object):
         return results
 
 
+@PIPELINES.register_module()
+class PointToMultiViewDepth_Plus(object):
+
+    def __init__(self, grid_config, downsample=1):
+        self.downsample = downsample
+        self.grid_config = grid_config
+
+    def points2depthmap(self, points, height, width):
+        height, width = height // self.downsample, width // self.downsample
+        depth_map = torch.zeros((height, width), dtype=torch.float32)
+        coor = torch.round(points[:, :2] / self.downsample) # 图片缩放
+        depth = points[:, 2]
+        kept1 = (coor[:, 0] >= 0) & (coor[:, 0] < width) & (
+            coor[:, 1] >= 0) & (coor[:, 1] < height) & (
+                depth < self.grid_config['depth'][1]) & (
+                    depth >= self.grid_config['depth'][0])
+        coor, depth = coor[kept1], depth[kept1]
+        ranks = coor[:, 0] + coor[:, 1] * width
+        sort = (ranks + depth / 100.).argsort()
+        coor, depth, ranks = coor[sort], depth[sort], ranks[sort]
+
+        kept2 = torch.ones(coor.shape[0], device=coor.device, dtype=torch.bool)
+        print(sum(kept2))
+        kept2[1:] = (ranks[1:] != ranks[:-1]) # ？
+        coor, depth = coor[kept2], depth[kept2]
+        coor = coor.to(torch.long)
+        depth_map[coor[:, 1], coor[:, 0]] = depth
+        return depth_map
+
+    def __call__(self, results):
+        points_lidar = results['points']
+        imgs, rots, trans, intrins = results['img_inputs'][:4]
+        post_rots, post_trans, bda = results['img_inputs'][4:7]
+        depth_map_list = []
+        for idx in range(len(imgs)):
+            bda_M = torch.from_numpy(np.eye(4, dtype=np.float32))
+            bda_M[:3,:3] = bda
+            
+            cam2img = np.eye(4, dtype=np.float32)
+            cam2img = torch.from_numpy(cam2img)
+            cam2img = intrins[idx]
+            lidar2cam = torch.from_numpy(np.eye(4, dtype=np.float32))
+            lidar2cam[:3,:3]=rots[idx]
+            lidar2cam[:3,3]=trans[idx]
+            lidar2img = cam2img.matmul(lidar2cam.matmul(bda_M.inverse()))
+            
+            points_img = points_lidar.tensor[:, :3].matmul(
+                lidar2img[:3, :3].T) + lidar2img[:3, 3].unsqueeze(0)
+            points_img = torch.cat(
+                [points_img[:, :2] / points_img[:, 2:3], points_img[:, 2:3]],
+                1)
+            points_img = points_img.matmul(
+                post_rots[idx].T) + post_trans[idx:idx + 1, :]
+            depth_map = self.points2depthmap(points_img, imgs.shape[2],
+                                             imgs.shape[3])
+            depth_map_list.append(depth_map)
+        depth_map = torch.stack(depth_map_list)
+        results['gt_depth'] = depth_map
+        return results
+
 def mmlabNormalize(img):
     from mmcv.image.photometric import imnormalize
     mean = np.array([123.675, 116.28, 103.53], dtype=np.float32)
@@ -1705,6 +1765,7 @@ class PrepareImageInputs(object):
         post_trans = torch.stack(post_trans)
         # sensor2sensors = torch.stack(sensor2sensors)
         results['canvas'] = canvas
+        results['raw_img'] = raw_imgs
         # results['sensor2sensors'] = sensor2sensors
         if self.use_offline_feature:
             img_feature = torch.stack(img_features).squeeze(1)
