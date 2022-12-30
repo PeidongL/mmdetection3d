@@ -51,21 +51,32 @@ def main(exps: List[str],indexs: List[int],distance: int,save_plot_path: str):
         for j in range(exp_len):
             tpr_file = os.path.join(exps[j], tpr_files[j][i])
             tpr = pd.read_csv(tpr_file, header=None, names=schema)
-            label_name = exps[j].split('/')[-3] + '_e' + str(indexs[j])
-            plt.plot(tpr['rec'], tpr['pr'], "*-%s"%color[j], label=label_name)
+            label_name = exps[j].split('/')[-2] + '_e' + str(indexs[j])
+            plt.plot(tpr['rec'], tpr['pr'], "*-", label=label_name)
         plt.legend(loc="lower left")
         plt.savefig(os.path.join(save_plot_path, '%s.png'%plt_title))
 
 if __name__ == '__main__':
     # fire.Fire(main)
-    exps = ['/mnt/intel/jupyterhub/mrb/work_dirs/pcdet_bev_fusion_load_img_fea/lidar_only_80_epoch_25cm_4gpu_20221030-102547/eval',
-        #   '/mnt/intel/jupyterhub/mrb/train_log/mm3d/pcdet_bev_fusion_load_img_fea/lss_80_epoch_25cm_4gpu_20221028-112316/eval',
-          '/mnt/intel/jupyterhub/mrb/train_log/mm3d/pcdet_bev_fusion_load_img_fea/depthlss_80_epoch_25cm_4gpu_20221028-112703/eval',
-          '/mnt/intel/jupyterhub/mrb/work_dirs/prefusion_L3_random_100/prefusion_L3_20221015-095649/eval',
-          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/no_proj/pcdet_bev_fusion_height/2022-11-16T12-47-00/eval',
-          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_bev_fusion_height/2022-11-11T16-07-56/eval',
-          '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_plus_fusion/2022-11-13T00-40-37/eval']
-    indexs = [80, 80, 80, 80, 80, 80]
+    root_dir = '/mnt/intel/jupyterhub/mrb/'
+    exps = [
+"work_dirs/L4_data_models/lss_bevfusion_48x96/lss_bevfusion_lidar/eval",
+"work_dirs/L4_data_models/lss_bevfusion_48x96/lss_bevfusion_fusion/eval",
+
+"work_dirs/L4_data_models/bevfusion_48x96/bevdet2.0_lidar_only/eval",
+"work_dirs/L4_data_models/bevfusion_48x96/bevdet2.0_fusion/eval",
+"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_fusion/eval",
+
+# camera only
+"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_camera/eval",
+"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_epoch80/eval",
+
+    ]
+    indexs = [ 80,80,80,80,80,80,160]
+    
+    
     distance = 100
-    save_plot_path = '/home/peidong.li/mmdetection3d/work_dirs/L3_data_models/pcdet/debug/pcdet_bev_fusion_height/'
+    save_plot_path = './'
+    for idx in range(len(exps)):
+        exps[idx] = os.path.join(root_dir, exps[idx])
     main(exps, indexs, distance, save_plot_path)
