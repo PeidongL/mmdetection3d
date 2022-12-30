@@ -1353,6 +1353,7 @@ class PrepareImageInputs(object):
         ego_cam='CAM_FRONT',
         is_plusdata=False,
         use_offline_feature=False,
+        offline_feature_resize_shape=None,
     ):
         self.is_train = is_train
         self.data_config = data_config
@@ -1361,7 +1362,7 @@ class PrepareImageInputs(object):
         self.ego_cam = ego_cam
         self.is_plusdata = is_plusdata
         self.use_offline_feature = use_offline_feature
-
+        self.offline_feature_resize_shape = offline_feature_resize_shape
     def get_rot(self, h):
         return torch.Tensor([
             [np.cos(h), np.sin(h)],
@@ -1680,10 +1681,10 @@ class PrepareImageInputs(object):
 
                 feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
                 img_feature = torch.Tensor(np.load(feature_name))
-                if 'side_left_camera' in feature_name or 'side_right_camera' in feature_name:
-                    resized_feature = self.resize_feature(128, 240, img_feature)
+                if img_feature.shape[-2:] != self.offline_feature_resize_shape:
+                    resized_feature = self.resize_feature(*self.offline_feature_resize_shape, img_feature)
                     img_features.append(resized_feature)
-                else:  
+                else:
                     img_features.append(img_feature)
                 
             canvas.append(np.array(img))

@@ -12,7 +12,8 @@ point_cloud_range = [-24, -24, -2, 72, 24, 6]
 use_sync_bn=True # set Fasle when debug
 used_cameras = 4
 use_offline_img_feat=True
-used_sensors = {'use_lidar': False,
+offline_feature_resize_shape=(72, 120)
+used_sensors = {'use_lidar': True,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
@@ -77,6 +78,7 @@ model = dict(
         type='LSSViewTransformer',
         grid_config=grid_config,
         input_size=(540,960),
+        feature_size=offline_feature_resize_shape,
         in_channels=64,
         out_channels=numC_Trans,
         downsample=16),
@@ -229,7 +231,8 @@ train_pipeline = [
         is_train=True, 
         data_config=data_config,
         is_plusdata=True,
-        use_offline_feature=True),
+        use_offline_feature=True,
+        offline_feature_resize_shape=offline_feature_resize_shape),
     dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
@@ -420,7 +423,7 @@ optimizer = dict(lr=lr)
 # development of the codebase thus we keep the setting. But we does not
 # specifically tune this parameter.
 optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
-runner = dict(max_epochs=80)
+runner = dict(max_epochs=40)
 
 # Use evaluation interval=2 reduce the number of evaluation timese
 evaluation = dict(interval=5)

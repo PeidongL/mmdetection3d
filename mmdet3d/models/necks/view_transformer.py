@@ -36,6 +36,7 @@ class LSSViewTransformer(BaseModule):
         self,
         grid_config,
         input_size,
+        feature_size=None,
         downsample=16,
         in_channels=512,
         out_channels=64,
@@ -46,7 +47,6 @@ class LSSViewTransformer(BaseModule):
         self.downsample = downsample
         self.create_grid_infos(**grid_config)
         self.grid_config = grid_config
-        feature_size = (128, 240)
         self.feature_size = feature_size
         
         self.d = torch.arange(*grid_config['depth'], dtype=torch.float)\
