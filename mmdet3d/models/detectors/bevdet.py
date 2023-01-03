@@ -422,6 +422,90 @@ class BEVDet4D(BEVDet):
         x = self.bev_encoder(bev_feat)
         return [x], depth_list[0]
 
+@DETECTORS.register_module()
+class BEVDepth(BEVDet):
+    def extract_img_feat(self, img, img_metas, **kwargs):
+        """Extract features of images."""
+        rots, trans, intrins, post_rots, post_trans, bda = img[1:7]
+        mlp_input = self.img_view_transformer.get_mlp_input(
+                    rots, trans, intrins, post_rots, post_trans, bda)
+        x = self.image_encoder(img[0])
+        x, depth = self.img_view_transformer(
+            [x, rots, trans, intrins, post_rots, post_trans, bda, mlp_input])
+        x = self.bev_encoder(x)
+        return [x], depth
+
+    def forward_train(self,
+                      points=None,
+                      img_metas=None,
+                      gt_bboxes_3d=None,
+                      gt_labels_3d=None,
+                      gt_labels=None,
+                      gt_bboxes=None,
+                      img_inputs=None,
+                      proposals=None,
+                      gt_bboxes_ignore=None,
+                      **kwargs):
+        """Forward training function.
+
+        Args:
+            points (list[torch.Tensor], optional): Points of each sample.
+                Defaults to None.
+            img_metas (list[dict], optional): Meta information of each sample.
+                Defaults to None.
+            gt_bboxes_3d (list[:obj:`BaseInstance3DBoxes`], optional):
+                Ground truth 3D boxes. Defaults to None.
+            gt_labels_3d (list[torch.Tensor], optional): Ground truth labels
+                of 3D boxes. Defaults to None.
+            gt_labels (list[torch.Tensor], optional): Ground truth labels
+                of 2D boxes in images. Defaults to None.
+            gt_bboxes (list[torch.Tensor], optional): Ground truth 2D boxes in
+                images. Defaults to None.
+            img (torch.Tensor optional): Images of each sample with shape
+                (N, C, H, W). Defaults to None.
+            proposals ([list[torch.Tensor], optional): Predicted proposals
+                used for training Fast RCNN. Defaults to None.
+            gt_bboxes_ignore (list[torch.Tensor], optional): Ground truth
+                2D boxes in images to be ignored. Defaults to None.
+
+        Returns:
+            dict: Losses of different branches.
+        """
+        img_feats, pts_feats, depth = self.extract_feat(
+            points, img=img_inputs, img_metas=img_metas, **kwargs)
+        gt_depth = kwargs['gt_depth']
+        loss_depth = self.img_view_transformer.get_depth_loss(gt_depth, depth)
+        losses = dict(loss_depth=loss_depth)
+        losses_pts = self.forward_pts_train(img_feats, gt_bboxes_3d,
+                                            gt_labels_3d, img_metas,
+                                            gt_bboxes_ignore)
+        losses.update(losses_pts)
+        return losses
+
+@DETECTORS.register_module()
+class BEVHeight(BEVDepth):
+    @force_fp32()
+    def get_depth_loss(self, depth_gt, depth):
+        B, N, H, W = depth_gt.shape
+        mask = (~(depth_gt == -10)).reshape(B, N, 1, H, W).expand(B, N,
+                                                                       self.img_view_transformer.D,
+                                                                       H, W)
+        depth_gt = (depth_gt - self.img_view_transformer.grid_config['dbound'][0])\
+                   /self.img_view_transformer.grid_config['dbound'][2]
+        depth_gt = torch.clip(torch.floor(depth_gt), 0,
+                              self.img_view_transformer.D-1).to(torch.long)
+        depth_gt_logit = F.one_hot(depth_gt.reshape(-1),
+                                   num_classes=self.img_view_transformer.D)
+        depth_gt_logit = depth_gt_logit.reshape(B, N, H, W,
+                                                self.img_view_transformer.D).permute(
+            0, 1, 4, 2, 3).to(torch.float32)
+        depth = depth.sigmoid().view(B, N, self.img_view_transformer.D, H, W)
+        loss_depth = F.smooth_l1_loss(depth[mask], depth_gt_logit[mask], beta=0.05)
+
+        # loss_depth = F.binary_cross_entropy(depth, depth_gt_logit,
+        #                                     weight=loss_weight)
+        loss_depth = self.img_view_transformer.loss_depth_weight * loss_depth
+        return loss_depth
 
 @DETECTORS.register_module()
 class BEVDepth4D(BEVDet4D):

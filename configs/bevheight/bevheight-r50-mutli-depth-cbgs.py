@@ -34,19 +34,15 @@ grid_config = {
     'x': [-51.2, 51.2, 0.8],
     'y': [-51.2, 51.2, 0.8],
     'z': [-5, 3, 8],
-    'depth': [1.0, 60.0, 0.5],
+    'depth': [1.0, 60.0, 1.0],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
 
 numC_Trans = 80
 
-multi_adj_frame_id_cfg = (1, 8+1, 1)
-
 model = dict(
-    type='BEVDepth4D',
-    align_after_view_transfromation=False,
-    num_adj=len(range(*multi_adj_frame_id_cfg)),
+    type='BEVDepth',
     img_backbone=dict(
         pretrained='torchvision://resnet50',
         type='ResNet',
@@ -60,34 +56,27 @@ model = dict(
         style='pytorch'),
     img_neck=dict(
         type='CustomFPN',
-        in_channels=[1024, 2048],
+        in_channels=[256, 512, 1024, 2048],
         out_channels=512,
         num_outs=1,
         start_level=0,
-        out_ids=[0]),
+        out_ids=[0, 1, 2, 3]),
     img_view_transformer=dict(
-        type='LSSViewTransformerBEVDepth',
+        type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
-        input_size=data_config['input_size'],
-        in_channels=512,
-        out_channels=numC_Trans,
+        data_config=data_config,
+        pc_range=point_cloud_range,
+        numC_Trans=numC_Trans,
         depthnet_cfg=dict(use_dcn=False),
         downsample=16),
     img_bev_encoder_backbone=dict(
         type='CustomResNet',
-        numC_input=numC_Trans * (len(range(*multi_adj_frame_id_cfg))+1),
+        numC_input=numC_Trans,
         num_channels=[numC_Trans * 2, numC_Trans * 4, numC_Trans * 8]),
     img_bev_encoder_neck=dict(
         type='FPN_LSS',
         in_channels=numC_Trans * 8 + numC_Trans * 2,
         out_channels=256),
-    pre_process=dict(
-        type='CustomResNet',
-        numC_input=numC_Trans,
-        num_layer=[2,],
-        num_channels=[numC_Trans,],
-        stride=[1,],
-        backbone_output_ids=[0,]),
     pts_bbox_head=dict(
         type='CenterHead',
         in_channels=256,
@@ -127,7 +116,7 @@ model = dict(
             gaussian_overlap=0.1,
             max_objs=500,
             min_radius=2,
-            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0])),
+            code_weights=[1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 0.2, 0.2])),
     test_cfg=dict(
         pts=dict(
             pc_range=point_cloud_range[:2],
@@ -165,8 +154,7 @@ train_pipeline = [
     dict(
         type='PrepareImageInputs',
         is_train=True,
-        data_config=data_config,
-        sequential=True),
+        data_config=data_config),
     dict(
         type='LoadAnnotationsBEVDepth',
         bda_aug_conf=bda_aug_conf,
@@ -187,7 +175,7 @@ train_pipeline = [
 ]
 
 test_pipeline = [
-    dict(type='PrepareImageInputs', data_config=data_config, sequential=True),
+    dict(type='PrepareImageInputs', data_config=data_config),
     dict(
         type='LoadAnnotationsBEVDepth',
         bda_aug_conf=bda_aug_conf,
@@ -224,8 +212,7 @@ share_data_config = dict(
     type=dataset_type,
     classes=class_names,
     modality=input_modality,
-    img_info_prototype='bevdet4d',
-    multi_adj_frame_id_cfg=multi_adj_frame_id_cfg,
+    img_info_prototype='bevdet',
 )
 
 test_data_config = dict(
@@ -260,9 +247,9 @@ optimizer_config = dict(grad_clip=dict(max_norm=5, norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=200,
     warmup_ratio=0.001,
-    step=[20,])
+    step=[16,19])
 runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 custom_hooks = [
@@ -270,10 +257,6 @@ custom_hooks = [
         type='MEGVIIEMAHook',
         init_updates=10560,
         priority='NORMAL',
-    ),
-    dict(
-        type='SequentialControlHook',
-        temporal_start_epoch=3,
     ),
 ]
 

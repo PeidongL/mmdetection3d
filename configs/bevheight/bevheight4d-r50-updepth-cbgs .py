@@ -52,7 +52,7 @@ model = dict(
         type='ResNet',
         depth=50,
         num_stages=4,
-        out_indices=(2, 3),
+        out_indices=(0, 1, 2, 3),
         frozen_stages=-1,
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=False,
@@ -60,19 +60,19 @@ model = dict(
         style='pytorch'),
     img_neck=dict(
         type='CustomFPN',
-        in_channels=[1024, 2048],
+        in_channels=[256, 512, 1024, 2048],
         out_channels=512,
-        num_outs=1,
+        num_outs=4,
         start_level=0,
-        out_ids=[0]),
+        out_ids=[0, 2]),
     img_view_transformer=dict(
-        type='LSSViewTransformerBEVDepth',
+        type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
-        input_size=data_config['input_size'],
-        in_channels=512,
-        out_channels=numC_Trans,
+        data_config=data_config,
+        pc_range=point_cloud_range,
+        numC_Trans=numC_Trans,
         depthnet_cfg=dict(use_dcn=False),
-        downsample=16),
+        downsample=4),
     img_bev_encoder_backbone=dict(
         type='CustomResNet',
         numC_input=numC_Trans * (len(range(*multi_adj_frame_id_cfg))+1),
@@ -213,6 +213,26 @@ test_pipeline = [
         ])
 ]
 
+eval_pipeline = [
+    dict(type='PrepareImageInputs', data_config=data_config, sequential=True),
+    dict(
+        type='LoadAnnotationsBEVDepth',
+        bda_aug_conf=bda_aug_conf,
+        classes=class_names,
+        is_train=False),
+    dict(
+        type='LoadPointsFromFile',
+        coord_type='LIDAR',
+        load_dim=5,
+        use_dim=5,
+        file_client_args=file_client_args),
+    dict(
+        type='DefaultFormatBundle3D',
+        class_names=class_names,
+        with_label=False),
+    dict(type='Collect3D', keys=['img_inputs'])
+]
+
 input_modality = dict(
     use_lidar=False,
     use_camera=True,
@@ -256,25 +276,35 @@ data['train']['dataset'].update(share_data_config)
 
 # Optimizer
 optimizer = dict(type='AdamW', lr=2e-4, weight_decay=1e-2)
-optimizer_config = dict(grad_clip=dict(max_norm=5, norm_type=2))
+optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=200,
     warmup_ratio=0.001,
     step=[20,])
-runner = dict(type='EpochBasedRunner', max_epochs=20)
+runner = dict(type='EpochBasedRunner', max_epochs=24)
+
+# optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
+# lr_config = dict(
+#     policy='step',
+#     warmup='linear',
+#     warmup_iters=500,
+#     warmup_ratio=0.001,
+#     step=[19,23])
+# runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 custom_hooks = [
     dict(
         type='MEGVIIEMAHook',
         init_updates=10560,
         priority='NORMAL',
+        #resume = 'work_dirs/bevheight/bevheight4d-r50-depth-cbgs/v1/bevheight4d-r50-depth-cbgs/epoch_16_ema.pth',
     ),
     dict(
         type='SequentialControlHook',
         temporal_start_epoch=3,
     ),
 ]
-
+# evaluation = dict(interval=4)
 # fp16 = dict(loss_scale='dynamic')

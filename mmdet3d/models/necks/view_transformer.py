@@ -14,10 +14,9 @@ from ..builder import NECKS
 
 @NECKS.register_module()
 class LSSViewTransformer(BaseModule):
-    r"""Lift-Splat-Shoot view transformer.
-
-    Please refer to the `paper <https://arxiv.org/abs/2008.05711>`_
-
+    r"""Lift-Splat-Shoot view transformer with BEVPoolv2 implementation.
+    Please refer to the `paper <https://arxiv.org/abs/2008.05711>`_ and
+        `paper <https://arxiv.org/abs/2211.17111>`
     Args:
         grid_config (dict): Config of grid alone each axis in format of
             (lower_bound, upper_bound, interval). axis in {x,y,z,depth}.
@@ -45,12 +44,7 @@ class LSSViewTransformer(BaseModule):
         self.grid_config = grid_config
         self.downsample = downsample
         self.create_grid_infos(**grid_config)
-        self.grid_config = grid_config
-        self.feature_size = feature_size
-        
-        self.d = torch.arange(*grid_config['depth'], dtype=torch.float)\
-            .view(-1, 1, 1).expand(-1, feature_size[0], feature_size[1])
-        self.D = self.d.shape[0]
+        self.create_frustum(grid_config['depth'], input_size, downsample)
         self.out_channels = out_channels
         self.in_channels = in_channels
         self.depth_net = nn.Conv2d(
@@ -61,7 +55,6 @@ class LSSViewTransformer(BaseModule):
     def create_grid_infos(self, x, y, z, **kwargs):
         """Generate the grid information including the lower bound, interval,
         and size.
-
         Args:
             x (tuple(float)): Config of grid alone x axis in format of
                 (lower_bound, upper_bound, interval).
@@ -76,9 +69,8 @@ class LSSViewTransformer(BaseModule):
         self.grid_size = torch.Tensor([(cfg[1] - cfg[0]) / cfg[2]
                                        for cfg in [x, y, z]])
 
-    def create_frustum(self, depth_cfg, input_size, feature_size):
+    def create_frustum(self, depth_cfg, input_size, downsample):
         """Generate the frustum template for each image.
-
         Args:
             depth_cfg (tuple(float)): Config of grid alone depth axis in format
                 of (lower_bound, upper_bound, interval).
@@ -88,21 +80,22 @@ class LSSViewTransformer(BaseModule):
                 the feature size.
         """
         H_in, W_in = input_size
-        H_feat, W_feat = feature_size
-
+        H_feat, W_feat = H_in // downsample, W_in // downsample
+        d = torch.arange(*depth_cfg, dtype=torch.float)\
+            .view(-1, 1, 1).expand(-1, H_feat, W_feat)
+        self.D = d.shape[0]
         x = torch.linspace(0, W_in - 1, W_feat,  dtype=torch.float)\
             .view(1, 1, W_feat).expand(self.D, H_feat, W_feat)
         y = torch.linspace(0, H_in - 1, H_feat,  dtype=torch.float)\
             .view(1, H_feat, 1).expand(self.D, H_feat, W_feat)
 
         # D x H x W x 3
-        return torch.stack((x, y, self.d), -1)
+        self.frustum = torch.stack((x, y, d), -1)
 
     def get_lidar_coor(self, rots, trans, cam2imgs, post_rots, post_trans,
                        bda):
         """Calculate the locations of the frustum points in the lidar
         coordinate system.
-
         Args:
             rots (torch.Tensor): Rotation from camera coordinate system to
                 lidar coordinate system in shape (B, N_cams, 3, 3).
@@ -115,7 +108,6 @@ class LSSViewTransformer(BaseModule):
                 augmentation.
             post_trans (torch.Tensor): Translation in camera coordinate system
                 derived from image view augmentation in shape (B, N_cams, 3).
-
         Returns:
             torch.tensor: Point coordinates in shape
                 (B, N_cams, D, ownsample, 3)
@@ -123,19 +115,8 @@ class LSSViewTransformer(BaseModule):
         B, N, _ = trans.shape
 
         # post-transformation
-        post_trans = torch.zeros(B,N,3).to(rots)
-        post_rots = torch.eye(3, 3).repeat(B,N,1,1).to(rots)
         # B x N x D x H x W x 3
-        frustums = []
-        for i in range(B):
-            single_frustums=[]
-            for img_shape in img_metas[i]['img_shape']: # 多个camera
-                single_frustum = self.create_frustum(self.grid_config['depth'], img_shape[0:2], self.feature_size)
-                single_frustums.append(single_frustum)
-            frustums.append(torch.stack(single_frustums))
-
-        frustum = torch.stack(frustums)
-        points = frustum.to(rots) - post_trans.view(B, N, 1, 1, 1, 3)
+        points = self.frustum.to(rots) - post_trans.view(B, N, 1, 1, 1, 3)
         points = torch.inverse(post_rots).view(B, N, 1, 1, 1, 3, 3)\
             .matmul(points.unsqueeze(-1))
 
@@ -152,7 +133,6 @@ class LSSViewTransformer(BaseModule):
     def init_acceleration_v2(self, coor):
         """Pre-compute the necessary information in acceleration including the
         index of points in the final feature.
-
         Args:
             coor (torch.tensor): Coordinate of points in lidar space in shape
                 (B, N_cams, D, H, W, 3).
@@ -198,11 +178,9 @@ class LSSViewTransformer(BaseModule):
 
     def voxel_pooling_prepare_v2(self, coor):
         """Data preparation for voxel pooling.
-
         Args:
             coor (torch.tensor): Coordinate of points in the lidar space in
                 shape (B, N, D, H, W, 3).
-
         Returns:
             tuple[torch.tensor]: Rank of the voxel that a point is belong to
                 in shape (N_Points); Reserved index of points in the depth
@@ -291,17 +269,15 @@ class LSSViewTransformer(BaseModule):
             self.pre_compute(input)
         return self.view_transform_core(input, depth, tran_feat)
 
-    def forward(self, img_feats, img_metas, lidar2img, lidar2camera, camera_intrinsics):
+    def forward(self, input):
         """Transform image-view feature into bird-eye-view feature.
-
         Args:
             input (list(torch.tensor)): of (image-view feature, rots, trans,
                 intrins, post_rots, post_trans)
-
         Returns:
             torch.tensor: Bird-eye-view feature in shape (B, C, H_BEV, W_BEV)
         """
-        x = img_feats
+        x = input[0]
         B, N, C, H, W = x.shape
         x = x.view(B * N, C, H, W)
         x = self.depth_net(x)

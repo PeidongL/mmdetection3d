@@ -18,11 +18,11 @@ data_config = {
     ],
     'Ncams':
     6,
-    'input_size': (256, 704),
+    'input_size': (640, 1600),
     'src_size': (900, 1600),
 
     # Augmentation
-    'resize': (-0.06, 0.11),
+    'resize': (-0.06, 0.25),
     'rot': (-5.4, 5.4),
     'flip': True,
     'crop_h': (0.0, 0.0),
@@ -31,46 +31,49 @@ data_config = {
 
 # Model
 grid_config = {
-    'x': [-51.2, 51.2, 0.8],
-    'y': [-51.2, 51.2, 0.8],
+    'x': [-51.2, 51.2, 0.4],
+    'y': [-51.2, 51.2, 0.4],
     'z': [-5, 3, 8],
-    'depth': [1.0, 60.0, 0.5],
+    'depth': [2.0, 58.0, 0.5],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
 
 numC_Trans = 80
 
-multi_adj_frame_id_cfg = (1, 8+1, 1)
+multi_adj_frame_id_cfg = (1, 2+1, 1)
+custom_imports = dict(imports='mmcls.models', allow_failed_imports=False)
+checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext/convnext-base_3rdparty_32xb128-noema_in1k_20220222-dba4f95f.pth'
 
 model = dict(
     type='BEVDepth4D',
     align_after_view_transfromation=False,
     num_adj=len(range(*multi_adj_frame_id_cfg)),
     img_backbone=dict(
-        pretrained='torchvision://resnet50',
-        type='ResNet',
-        depth=50,
-        num_stages=4,
-        out_indices=(2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=True),
-        norm_eval=False,
-        with_cp=True,
-        style='pytorch'),
+        type='mmcls.ConvNeXt',
+        arch='base',
+        out_indices=[2, 3],
+        drop_path_rate=0.4,
+        layer_scale_init_value=1.0,
+        gap_before_final_norm=False,
+        init_cfg=dict(
+            type='Pretrained', checkpoint=checkpoint_file,
+            prefix='backbone.')),
     img_neck=dict(
         type='CustomFPN',
-        in_channels=[1024, 2048],
+        in_channels=[512, 1024],
         out_channels=512,
         num_outs=1,
         start_level=0,
         out_ids=[0]),
     img_view_transformer=dict(
-        type='LSSViewTransformerBEVDepth',
+        type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
-        input_size=data_config['input_size'],
-        in_channels=512,
-        out_channels=numC_Trans,
+        data_config=data_config,
+        pc_range=point_cloud_range,
+        numC_Trans=numC_Trans,
+        bev_h=256, 
+        bev_w=256,
         depthnet_cfg=dict(use_dcn=False),
         downsample=16),
     img_bev_encoder_backbone=dict(
@@ -108,11 +111,20 @@ model = dict(
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             max_num=500,
             score_threshold=0.1,
-            out_size_factor=8,
+            out_size_factor=4,
             voxel_size=voxel_size[:2],
             code_size=9),
         separate_head=dict(
-            type='SeparateHead', init_bias=-2.19, final_kernel=3),
+            type='DCNSeparateHead',
+            dcn_config=dict(
+                type='DCN',
+                in_channels=64,
+                out_channels=64,
+                kernel_size=3,
+                padding=1,
+                groups=4),
+            init_bias=-2.19,
+            final_kernel=3),
         loss_cls=dict(type='GaussianFocalLoss', reduction='mean'),
         loss_bbox=dict(type='L1Loss', reduction='mean', loss_weight=0.25),
         norm_bbox=True),
@@ -122,7 +134,7 @@ model = dict(
             point_cloud_range=point_cloud_range,
             grid_size=[1024, 1024, 40],
             voxel_size=voxel_size,
-            out_size_factor=8,
+            out_size_factor=4,
             dense_reg=1,
             gaussian_overlap=0.1,
             max_objs=500,
@@ -136,7 +148,7 @@ model = dict(
             max_pool_nms=False,
             min_radius=[4, 12, 10, 1, 0.85, 0.175],
             score_threshold=0.1,
-            out_size_factor=8,
+            out_size_factor=4,
             voxel_size=voxel_size[:2],
             pre_max_size=1000,
             post_max_size=83,
@@ -233,7 +245,7 @@ test_data_config = dict(
     ann_file=data_root + 'bevdetv2-nuscenes_infos_val.pkl')
 
 data = dict(
-    samples_per_gpu=8,
+    samples_per_gpu=2,
     workers_per_gpu=4,
     train=dict(
         type='CBGSDataset',
@@ -260,7 +272,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=5, norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=500,
+    warmup_iters=200,
     warmup_ratio=0.001,
     step=[20,])
 runner = dict(type='EpochBasedRunner', max_epochs=20)
