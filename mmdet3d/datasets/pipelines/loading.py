@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from PIL import Image
 from pyquaternion import Quaternion
-
+import os
 import os.path as osp
 from torch.nn import functional as F
 from mmdet3d.core.points import BasePoints, get_points_type
@@ -1698,7 +1698,9 @@ class PrepareImageInputs(object):
         raw_imgs = []
         
         # sensor2sensors = []
-        for idx, filename in enumerate(results['img_info']):
+        camera_names = results['camera_names']
+        for idx, camera_names in enumerate(camera_names):
+            filename = results['img_info'][idx]
             lidar2cam = results['lidar2camera'][idx]
             # filename = cam_data['data_path']
             img = Image.open(filename)
@@ -1739,7 +1741,11 @@ class PrepareImageInputs(object):
                 post_tran = torch.zeros(3)
                 post_rot = torch.eye(3)
 
-                feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+                #l3 dataset
+                feature_name = filename.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+                if not os.path.exists(feature_name): # l4 old dataset
+                    feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+                
                 img_feature = torch.Tensor(np.load(feature_name))
                 if img_feature.shape[-2:] != self.offline_feature_resize_shape:
                     resized_feature = self.resize_feature(*self.offline_feature_resize_shape, img_feature)
