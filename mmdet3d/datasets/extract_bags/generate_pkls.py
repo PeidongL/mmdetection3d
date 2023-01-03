@@ -35,7 +35,7 @@ class L4Dataset():
 
         self.point_cloud_range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float32)
         self.split = self.dataset_cfg.DATA_SPLIT[self.mode]
-        self.range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=np.float)
+        self.range = np.array(self.dataset_cfg.POINT_CLOUD_RANGE, dtype=float)
         self.num_points_in_object_threshold = 4
         # min_size:
         self.length_threshold = 4.0
@@ -63,27 +63,18 @@ class L4Dataset():
 
     def get_lidar(self, idx):
         lidar_file = self.root_split_path / 'pointcloud' / ('%s.bin' % idx)
+        tele_file = self.root_split_path / 'tele_points' / ('%s.bin' % idx)
         assert lidar_file.exists()
         lidar_data = np.fromfile(str(lidar_file)).reshape(-1, 4)
         # ignore intensity value
         lidar_data = np.concatenate([lidar_data[:, 0:3], np.zeros((lidar_data.shape[0], 1))], axis=1)
+        if os.path.exists(tele_file):
+            tele_data = np.fromfile(str(tele_file)).reshape(-1, 4)
+            tele_data = np.concatenate([tele_data[:, 0:3], np.zeros((tele_data.shape[0], 1))], axis=1)
+            
+            lidar_data = np.concatenate([lidar_data, tele_data], axis=0)
 
         return lidar_data
-
-    def get_camera_features(self, featrues_path):
-        feature_list = []
-        for name in featrues_path:
-            feature = np.load(name)
-            feature_list.append(feature)
-
-            img_name = name.replace('front_left_camera_feature', 'front_left_camera')
-            img_name = img_name.replace('_0.npy', '.jpg')
-            img = cv2.imread(img_name)
-            img = np.expand_dims(img, 0).transpose(0, 3, 1, 2)
-            feature_list.append(img)
-            break
-
-        return feature_list
 
     def get_label(self, idx):
         label_file = self.root_split_path / 'label' / ('%s.pkl' % idx)
@@ -93,17 +84,6 @@ class L4Dataset():
             print('[ERROR] get label failed:', label_file)
         with open(label_file, 'rb') as f:
             labels = pickle.load(f, encoding='latin1')
-            for label in labels:
-                # Combine Livox label names
-                if label['name'] in ['Car', 'car', 'police_car']:
-                    label['name'] = 'Car'
-                elif label['name'] in ['Truck', 'bus', 'truck', 'Engineering_vehicles', 'trailer']:
-                    label['name'] = 'Truck'
-                elif label['name'] in ['Pedestrian', 'pedestrians', 'wheelchair', 'stroller']:
-                    label['name'] = 'Pedestrian'
-                elif label['name'] in ['Cyclist', 'bicycle', 'motorcycle', 'Portable_personal_motor_vehicle']:
-                    label['name'] = 'Cyclist'
-
         return labels
 
     def is_size_valid(self, size):
@@ -120,8 +100,15 @@ class L4Dataset():
         size[4] = max(size[4], self.width_threshold)
         size[5] = max(size[5], self.height_threshold)
         return size
+    
+    def whether_care(self, type_name):
+        if 'Dontcare' in type_name:
+            return False
+        if type_name not in self.class_names:
+            return False
+        return True
 
-    def filter_object_by_rule(self, points, labels):  # todo
+    def filter_object_by_rule(self, points, labels):
         num_objects = len(labels)
         if num_objects == 0:
             print("[Warning] No objects in this frame.")
@@ -131,22 +118,24 @@ class L4Dataset():
         box_array = []
         for label in labels:
             box_array.append(label['box3d_lidar'])
-        box_array = np.array(box_array, dtype=np.float)
-        point_indices = points_in_boxes_cpu(torch.from_numpy(points[:, 0:3]),
-                                                                  torch.from_numpy(box_array)
-                                                                  ).numpy()  # (nboxes, npoints)
+        box_array = np.array(box_array, dtype=float)
+        point_indices = points_in_boxes_cpu(torch.from_numpy(points[:, 0:3]).unsqueeze_(0),
+                                                                  torch.from_numpy(box_array).unsqueeze_(0)
+                                                                  ).numpy()
+        point_indices = np.squeeze(point_indices, axis=0).transpose() # (nboxes, npoints)
         num_points = np.sum(point_indices, axis=1)
 
         filtered_label_list = []
         for idx in range(num_objects):
-            labels[idx]['box3d_lidar'] = np.array(labels[idx]['box3d_lidar'], dtype=np.float)
+            labels[idx]['box3d_lidar'] = np.array(labels[idx]['box3d_lidar'], dtype=float)
             loc_x = labels[idx]['box3d_lidar'][0]
             loc_y = labels[idx]['box3d_lidar'][1]
             num_pts_in_obj = num_points[idx]
             self.all_label_count += 1
             if self.range[0] <= loc_x <= self.range[3] \
                     and self.range[1] <= loc_y <= self.range[4] \
-                    and num_pts_in_obj >= self.num_points_in_object_threshold:
+                    and num_pts_in_obj >= self.num_points_in_object_threshold \
+                    and self.whether_care(labels[idx]['name']):
                 filtered_label_data = {'name': labels[idx]['name'],
                                        'box3d_lidar': self.check_size(labels[idx]['box3d_lidar']),
                                        'num_points_in_gt': num_pts_in_obj}
@@ -177,20 +166,7 @@ class L4Dataset():
             with open(label_file, 'wb') as f:
                 pickle.dump(filtered_obj_labels, f)
 
-    def load_images_and_calibs(self):
-
-        pkl_name = str(self.root_split_path / 'cam_img_timestamp.pkl')
-        pkl_file = open(pkl_name, 'rb')
-        data = pickle.load(pkl_file, encoding='latin1')
-        # NOTE(swc): only used here right now
-        self.camera_lidar_timestamp = data
-
-        self.cameras_img_name = {}
-        for camera_name in self.camera_names:
-            img_names = sorted(os.listdir(str(self.root_split_path / camera_name)))
-
-            self.cameras_img_name[camera_name] = img_names
-
+    def load_calibs(self):
         pkl_name = str(self.root_split_path / 'sensor_calibs.pkl')
         pkl_file = open(pkl_name, 'rb')
         self.sensor_calibs = pickle.load(pkl_file, encoding='latin1')
@@ -215,15 +191,11 @@ class L4Dataset():
         featrues = {'front_left_camera': feature_list}
         return featrues
 
-    def get_image_names(self, idx):
-        image_names = {}
-        for camera_name in self.camera_names:
-            image_names[camera_name] = self.cameras_img_name[camera_name][idx]
-        return image_names
-
     def get_sensor_calib(self, sample_idx):
 
         bag_name = sample_idx.split('.')[-1]
+        if len(bag_name) < 5:
+            bag_name = sample_idx.split('.')[-3] + '.' + sample_idx.split('.')[-2] + '.' + sample_idx.split('.')[-1]
         return self.sensor_calibs[bag_name]
 
     def get_infos(self, num_workers=4, has_label=True, count_inside_pts=True, sample_id_list=None):
@@ -231,7 +203,7 @@ class L4Dataset():
 
         if not self.sample_id_list:
             return []
-        self.load_images_and_calibs()
+        self.load_calibs()
 
         def process_single_scene(sample_idx):
             print('%s sample_idx: %s' % (self.split, sample_idx))
@@ -274,9 +246,9 @@ class L4Dataset():
                 annotations['alpha'] = np.array([0 for label in obj_labels])
                 annotations['bbox'] = np.array([[1, 1, 1, 1] for label in obj_labels])
                 annotations['dimensions'] = np.array([label['box3d_lidar'][3:6] for label in obj_labels],
-                                                     dtype=np.float)  # lwh(lidar) format
-                annotations['location'] = np.array([label['box3d_lidar'][0:3] for label in obj_labels], dtype=np.float)
-                annotations['rotation_y'] = np.array([label['box3d_lidar'][6] for label in obj_labels], dtype=np.float)
+                                                     dtype=float)  # lwh(lidar) format
+                annotations['location'] = np.array([label['box3d_lidar'][0:3] for label in obj_labels], dtype=float)
+                annotations['rotation_y'] = np.array([label['box3d_lidar'][6] for label in obj_labels], dtype=float)
                 annotations['score'] = np.array([1 for label in obj_labels])
                 annotations['difficulty'] = np.array([0 for label in obj_labels], np.int32)
 
@@ -314,47 +286,57 @@ class L4Dataset():
                     valid_infos.append(info)
         return valid_infos
 
-    def get_mm3d_infos(self, num_workers=4, has_label=True, count_inside_pts=True, sample_id_list=None):
+    def get_mm3d_infos(self, num_workers=4, has_label=True, count_inside_pts=True, sample_id_list=None, used_sensors='lc'):
         import concurrent.futures as futures
         # NOTE(swc): read from (self.split + '.txt')
         if not self.sample_id_list:
             return []
-        self.load_images_and_calibs()
+        self.load_calibs()
 
         def process_single_scene(sample_idx):
             print('%s sample_idx: %s' % (self.split, sample_idx))
-            idx = int(sample_idx.split('.')[0])
+            
+            # TODO(swc): judge whether all sensors data exist
+            camera_file = self.root_split_path / 'front_left_camera' / ('%s.jpg' % sample_idx)
+            radar_file = self.root_split_path / 'bumper_radar' / ('%s.npy' % sample_idx)
+            if used_sensors == 'lc' and not os.path.exists(camera_file):
+                return None
+            
+            if used_sensors == 'lr' and not os.path.exists(radar_file):
+                return None
+            
+            if used_sensors == 'lcr' and ((not os.path.exists(camera_file)) or (not os.path.exists(radar_file))):
+                return None
 
             info = {}
             sensor_calib = self.get_sensor_calib(sample_idx)
             pc_info = {'num_features': 4, 'lidar_idx': sample_idx}
             info['point_cloud'] = pc_info
 
-            # NOTE(swc): dict(camera0:path0, camera1:path1, ...)
-            camreas_image_path = self.get_image_names(idx)
             image_info = {}
             calib_info = {}
             image_info['image_idx'] = sample_idx
             # NOTE(swc): all camera infos
-            for camera_name in self.camera_names:
-                camera_img = cv2.imread(str(self.root_split_path / camera_name / camreas_image_path[camera_name]))
-                img_shape = camera_img.shape
-                image_info[camera_name] = {}
-                image_info[camera_name]['image_path'] = str(Path(camera_name) / camreas_image_path[camera_name])
-                image_info[camera_name]['image_shape'] = img_shape
+            if used_sensors == 'lc' or used_sensors == 'lcr':
+                for camera_name in self.camera_names:
+                    camera_img = cv2.imread(str(self.root_split_path / camera_name / ('%s.jpg' % sample_idx)))
+                    img_shape = camera_img.shape
+                    image_info[camera_name] = {}
+                    image_info[camera_name]['image_path'] = str(Path(camera_name) / ('%s.jpg' % sample_idx))
+                    image_info[camera_name]['image_shape'] = img_shape
 
-                if img_shape[0] == 1080:
-                    cam_calib = sensor_calib[camera_name + '_fullres']
-                else:
-                    cam_calib = sensor_calib[camera_name]
+                    if img_shape[0] == 1080:
+                        cam_calib = sensor_calib[camera_name + '_fullres']
+                    else:
+                        cam_calib = sensor_calib[camera_name]
 
-                calib_info[camera_name] = {}
-                calib_info[camera_name]['P2'] = cam_calib['P_4x4']
-                calib_info[camera_name]['R0_rect'] = cam_calib['Tr_imu_to_cam']
-                calib_info[camera_name]['Tr_velo_to_cam'] = np.eye(4)
+                    calib_info[camera_name] = {}
+                    calib_info[camera_name]['P2'] = cam_calib['P_4x4']
+                    calib_info[camera_name]['R0_rect'] = cam_calib['Tr_imu_to_cam']
+                    calib_info[camera_name]['Tr_velo_to_cam'] = np.eye(4)
 
-            info['image'] = image_info
-            info['calib'] = calib_info
+                info['image'] = image_info
+                info['calib'] = calib_info
 
             if has_label:
                 obj_labels = self.get_label(sample_idx)
@@ -364,25 +346,16 @@ class L4Dataset():
                 # Fuse some categories
                 anno_names = []
                 for label in obj_labels:
-                    if label['name'] in ['car', 'police_car']:
-                        anno_names.append('Car')
-                    elif label['name'] in ['bus', 'truck', 'Engineering_vehicles', 'trailer']:
-                        anno_names.append('Truck')
-                    elif label['name'] in ['pedestrians', 'wheelchair', 'stroller']:
-                        anno_names.append('Pedestrian')
-                    elif label['name'] in ['bicycle', 'motorcycle', 'Portable_personal_motor_vehicle']:
-                        anno_names.append('Cyclist')
-                    else:
-                        anno_names.append(label['name'])
+                    anno_names.append(label['name'])
                 annotations['name'] = np.array(anno_names)
                 annotations['truncated'] = np.array([0 for label in obj_labels])
                 annotations['occluded'] = np.array([0 for label in obj_labels])
                 annotations['alpha'] = np.array([0 for label in obj_labels])
                 annotations['bbox'] = np.array([[1, 1, 1, 1] for label in obj_labels])
                 annotations['dimensions'] = np.array([label['box3d_lidar'][3:6] for label in obj_labels],
-                                                     dtype=np.float)  # lwh(lidar) format
-                annotations['location'] = np.array([label['box3d_lidar'][0:3] for label in obj_labels], dtype=np.float)
-                annotations['rotation_y'] = np.array([label['box3d_lidar'][6] for label in obj_labels], dtype=np.float)
+                                                     dtype=float)  # lwh(lidar) format
+                annotations['location'] = np.array([label['box3d_lidar'][0:3] for label in obj_labels], dtype=float)
+                annotations['rotation_y'] = np.array([label['box3d_lidar'][6] for label in obj_labels], dtype=float)
                 annotations['score'] = np.array([1 for label in obj_labels])
                 annotations['difficulty'] = np.array([0 for label in obj_labels], np.int32)
 
@@ -403,10 +376,11 @@ class L4Dataset():
                 # gt_boxes_lidar = np.concatenate([loc_lidar, l, w, h, -(np.pi / 2 + rots[..., np.newaxis])], axis=1)
                 gt_boxes_lidar = np.concatenate([loc_lidar, l, w, h, rots[..., np.newaxis]], axis=1)
                 annotations['gt_boxes_lidar'] = gt_boxes_lidar
-                info['annos'] = annotations
 
                 if count_inside_pts:
                     annotations['num_points_in_gt'] = np.array([label['num_points_in_gt'] for label in obj_labels])
+                
+                info['annos'] = annotations
 
             return info
 
@@ -420,7 +394,7 @@ class L4Dataset():
                     valid_infos.append(info)
         return valid_infos
 
-    def create_groundtruth_database(self, info_path=None, used_classes=None, split='train'):
+    def create_groundtruth_database(self, info_path=None, used_classes=None, split='train', used_sensors='lc'):
         import torch
 
         database_save_path = Path(self.root_path) / ('gt_database' if split == 'train' else ('gt_database_%s' % split))
@@ -444,10 +418,10 @@ class L4Dataset():
             gt_boxes = annos['gt_boxes_lidar']
 
             num_obj = gt_boxes.shape[0]
-            point_indices = points_in_boxes_cpu(
-                torch.from_numpy(points[:, 0:3]), torch.from_numpy(gt_boxes)
-            ).numpy()  # (nboxes, npoints)
-
+            point_indices = points_in_boxes_cpu(torch.from_numpy(points[:, 0:3]).unsqueeze_(0),
+                                                                  torch.from_numpy(gt_boxes).unsqueeze_(0)
+                                                                  ).numpy()
+            point_indices = np.squeeze(point_indices, axis=0).transpose() # (nboxes, npoints)
             for i in range(num_obj):
                 filename = '%s_%s_%d.bin' % (sample_idx, names[i], i)
                 filepath = database_save_path / filename
@@ -518,24 +492,26 @@ def create_L4_data_infos(dataset_cfg, class_names, data_path, save_path, workers
     print('---------------Data preparation Done---------------')
 
 
-def create_mm3d_infos(dataset_cfg, class_names, data_path, save_path, workers=4):
+def create_mm3d_infos(dataset_cfg, class_names, data_path, save_path, workers=4, used_sensors='lc'):
     dataset = L4Dataset(dataset_cfg=dataset_cfg, class_names=class_names, root_path=data_path, mode='val', used_camera_names=dataset_cfg.CAMERA_NMAES)
     train_split, val_split = 'train', 'val'
     # L4/L4E
-    train_filename = save_path / ('Kitti_L4_data_mm3d_infos_%s.pkl' % train_split)
-    val_filename = save_path / ('Kitti_L4_data_mm3d_infos_%s.pkl' % val_split)
-    trainval_filename = save_path / 'Kitti_L4_data_mm3d_infos_trainval.pkl'
-    test_filename = save_path / 'Kitti_L4_data_mm3d_infos_test.pkl'
+    
+    trainval_filename = save_path / ('Kitti_L4_%s_data_mm3d_infos_trainval.pkl' % used_sensors)
 
     print('---------------Start to generate data infos---------------')
     dataset.set_split(train_split)
-    mm3d_data_infos_train = dataset.get_mm3d_infos(num_workers=workers, has_label=True, count_inside_pts=False)
+    mm3d_data_infos_train = dataset.get_mm3d_infos(num_workers=workers, has_label=True, count_inside_pts=False, used_sensors=used_sensors)
+    info_len = len(mm3d_data_infos_train)
+    train_filename = save_path / ('Kitti_L4_%s_data_mm3d_infos_%s_%d.pkl' % (used_sensors, train_split, info_len))
     with open(train_filename, 'wb') as f:
         pickle.dump(mm3d_data_infos_train, f)
     print('info train file is saved to %s' % train_filename)
 
     dataset.set_split(val_split)
-    mm3d_data_infos_val = dataset.get_mm3d_infos(num_workers=workers, has_label=True, count_inside_pts=False)
+    mm3d_data_infos_val = dataset.get_mm3d_infos(num_workers=workers, has_label=True, count_inside_pts=False, used_sensors=used_sensors)
+    info_len = len(mm3d_data_infos_val)
+    val_filename = save_path / ('Kitti_L4_%s_data_mm3d_infos_%s_%d.pkl' % (used_sensors, val_split, info_len))
     with open(val_filename, 'wb') as f:
         pickle.dump(mm3d_data_infos_val, f)
     print('info val file is saved to %s' % val_filename)
@@ -545,7 +521,9 @@ def create_mm3d_infos(dataset_cfg, class_names, data_path, save_path, workers=4)
     print('info trainval file is saved to %s' % trainval_filename)
 
     dataset.set_split('test')
-    mm3d_data_infos_test = dataset.get_mm3d_infos(num_workers=workers, has_label=False, count_inside_pts=False)
+    mm3d_data_infos_test = dataset.get_mm3d_infos(num_workers=workers, has_label=False, count_inside_pts=False, used_sensors=used_sensors)
+    info_len = len(mm3d_data_infos_test)
+    test_filename = save_path / ('Kitti_L4_%s_data_mm3d_infos_%s_%d.pkl' % (used_sensors, 'test', info_len))
     with open(test_filename, 'wb') as f:
         pickle.dump(mm3d_data_infos_test, f)
     print('info test file is saved to %s' % test_filename)
@@ -573,46 +551,53 @@ if __name__ == '__main__':
     print(sys.argv)
     # pcdet format
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_L4_data_infos':
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
+        dataset_cfg = EasyDict(yaml.full_load(open(sys.argv[2])))
         create_L4_data_infos(
+            dataset_cfg=dataset_cfg,
             class_names=dataset_cfg.VEHICLE_CLASS_NAMES,
             data_path=Path(dataset_cfg.DATA_PATH),
             save_path=Path(dataset_cfg.DATA_PATH)
         )
     # mm3d format
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_L4_data_mm3d_infos':
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
+        dataset_cfg = EasyDict(yaml.full_load(open(sys.argv[2])))
         subfolder = sys.argv[3]
+        used_sensors = sys.argv[4]
         data_path = dataset_cfg.DATA_PATH
         old_tail = data_path.split('/')[-1]
         data_path = data_path.replace(old_tail, subfolder)
         create_mm3d_infos(
-            class_names=dataset_cfg.ALL_CLASS_NAMES,
+            dataset_cfg=dataset_cfg,
+            class_names=dataset_cfg.VEHICLE_CLASS_NAMES,
             data_path=Path(data_path),
-            save_path=Path(data_path)
+            save_path=Path(data_path),
+            used_sensors=used_sensors
         )
         
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_bag_mm3d_infos':
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
+        dataset_cfg = EasyDict(yaml.full_load(open(sys.argv[2])))
         data_path = dataset_cfg.BAG_DATA_PATH
         create_mm3d_infos(
+            dataset_cfg=dataset_cfg,
             class_names=dataset_cfg.ALL_CLASS_NAMES, 
             data_path=Path(data_path),
             save_path=Path(data_path)
         )
     
     if sys.argv.__len__() > 1 and sys.argv[1] == 'create_bag_data_infos':
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
+        dataset_cfg = EasyDict(yaml.full_load(open(sys.argv[2])))
         data_path = sys.argv[3]
         dataset_cfg.DATA_PATH = data_path
         create_bag_data_infos(
+            dataset_cfg=dataset_cfg,
             class_names=dataset_cfg.ALL_CLASS_NAMES,
             data_path=Path(dataset_cfg.DATA_PATH),
             save_path=Path(dataset_cfg.DATA_PATH)
         )
     elif sys.argv.__len__() > 1 and sys.argv[1] == 'clean_labels':
-        dataset_cfg = EasyDict(yaml.load(open(sys.argv[2])))
+        dataset_cfg = EasyDict(yaml.full_load(open(sys.argv[2])))
         clean_labels(
+            dataset_cfg=dataset_cfg,
             class_names=dataset_cfg.ALL_CLASS_NAMES,
             data_path=Path(dataset_cfg.DATA_PATH),
             save_path=Path(dataset_cfg.DATA_PATH)

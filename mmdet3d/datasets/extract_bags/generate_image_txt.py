@@ -1,7 +1,7 @@
-import re, sys, os
-import numpy as np
+import os
 import fire
-from pluspy.file_utils import safe_make_dir
+import numpy as np
+from file_utils import safe_make_dir
 
 from functools import reduce
 
@@ -41,7 +41,7 @@ def main(folder='/home/plusai/Plus_2022/dataset/lidar/pc_label/L4E_origin_data/t
     test_set = perm[int(totol_num * (train_ratio + val_ratio)):]
     print("all", len(train_full_set))
     print("train", len(train_set))
-    print("value", len(val_set))
+    print("val", len(val_set))
     print("test", len(test_set))
     out += '/../ImageSets'
     safe_make_dir(out)
