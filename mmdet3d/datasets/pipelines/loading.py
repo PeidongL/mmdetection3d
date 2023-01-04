@@ -1205,8 +1205,8 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
             if img.shape[0] == 1080:
                 lidar2cam = results['lidar2camera'][idx]
                 
-                half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
-                results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
+                half_intri =  results['camera_intrinsics'][idx][0:2, :] / 2
+                results['camera_intrinsics'][idx][0:2, :] = half_intri
                 
                 intri = results['camera_intrinsics'][idx]
                 
@@ -1705,8 +1705,8 @@ class PrepareImageInputs(object):
             # filename = cam_data['data_path']
             img = Image.open(filename)
             if img.height == 1080:
-                half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
-                results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
+                half_intri =  results['camera_intrinsics'][idx][0:2, :] / 2
+                results['camera_intrinsics'][idx][0:2, :] = half_intri  
                 img = img.resize((img.width//2, img.height//2))
             
             raw_imgs.append(torch.tensor(np.array(img)).float().permute(2, 0, 1).contiguous())
