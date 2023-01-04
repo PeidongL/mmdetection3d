@@ -412,6 +412,7 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
     new_img = np.zeros((new_size[1], new_size[0], 3), np.uint8)
     
     show_img_list = []
+    sample_idx = input['img_metas'].data['sample_idx'].split('.')[0]
     for idx in range(cam_nums):
         show_img = show_imgs[idx]
         if type(show_img) == torch.Tensor: # raw_img, not canvas
@@ -444,7 +445,7 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
         if idx == 0:
             show_img = project_pts_on_img(points, show_img, lidar2img.numpy(), post_M)
         
-        cv2.putText(show_img, f"{camera_name}", (15, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
+        cv2.putText(show_img, f"{camera_name+'_'+sample_idx}", (15, 40), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale=1.0, color=(0, 0, 255), thickness=2)
         # mmcv.imshow(show_img, win_name='project_bbox3d_img', wait_time=0)
         show_img_list.append(show_img)
