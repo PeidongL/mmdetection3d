@@ -1345,7 +1345,7 @@ class PointToMultiViewDepth_Plus(object):
         coor, depth, ranks = coor[sort], depth[sort], ranks[sort]
 
         kept2 = torch.ones(coor.shape[0], device=coor.device, dtype=torch.bool)
-        print(sum(kept2))
+        # print(sum(kept2))
         kept2[1:] = (ranks[1:] != ranks[:-1]) # ？
         coor, depth = coor[kept2], depth[kept2]
         coor = coor.to(torch.long)
