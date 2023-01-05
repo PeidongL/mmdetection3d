@@ -1929,6 +1929,10 @@ class LoadAnnotationsBEVDepth_Plus(object):
 
     def __call__(self, results):
         if not self.is_train:
+            # for lidar only, there is no img_inputs
+            if 'img_inputs' not in results:
+                return results
+            
             imgs, rots, trans, intrins = results['img_inputs'][:4]
             post_rots, post_trans = results['img_inputs'][4:6]
             rotate_bda, scale_bda, flip_dx, flip_dy = self.sample_bda_augmentation()
@@ -1965,6 +1969,11 @@ class LoadAnnotationsBEVDepth_Plus(object):
             LiDARInstance3DBoxes(gt_boxes, box_dim=gt_boxes.shape[-1],
                                  origin=(0.5, 0.5, 0.5))
         results['gt_labels_3d'] = gt_labels
+        
+        # for lidar only, there is no img_inputs
+        if 'img_inputs' not in results:
+            return results
+        
         imgs, rots, trans, intrins = results['img_inputs'][:4]
         post_rots, post_trans = results['img_inputs'][4:6]
         if len(results['img_inputs']) > 6:
