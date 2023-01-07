@@ -5,21 +5,29 @@ _base_ = [
 # model settings
 voxel_size = [0.25, 0.25, 8]
 point_cloud_range = [0, -10, -2, 100, 10, 6]
-used_cameras=2
+# model settings
+use_sync_bn=True # set Fasle when debug
+used_cameras = 4
 use_offline_img_feat=True
-used_sensors = {'use_lidar': True,
+find_unused_parameters=False
+if use_offline_img_feat:
+    find_unused_parameters=True
+used_sensors = {'use_lidar': False,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
-    'x': [0, 100, voxel_size[0]],
-    'y': [-10, 10, voxel_size[1]],
+    'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
+    'y': [point_cloud_range[1], point_cloud_range[4], voxel_size[1]],
     'z': [-10.0, 10.0, 20.0],
-    'depth': [1.0, 100.0, 1],
+    'depth': [1.0, 100, 1],
 }
 bev_grid_map_size = [
     int((grid_config['y'][1] - grid_config['y'][0]) / voxel_size[1]),
     int((grid_config['x'][1] - grid_config['x'][0]) / voxel_size[0]),
     ]
+feat_channel = 0
+if used_sensors['use_lidar']: feat_channel+=64 
+if used_sensors['use_camera']: feat_channel+=64 
 
 
 model = dict(
@@ -42,9 +50,10 @@ model = dict(
     #     out_channels=64,
     #     accelerate=False,
     # ),
-    img_neck=dict(type='HeighTransform',
+    img_view_transformer=dict(type='HeighTransform',
         in_channels=64,
         out_channels=64,
+        used_cameras=4,
         image_size=(540, 960),
         feature_size=(104, 200),
         point_cloud_range = point_cloud_range,
@@ -72,10 +81,10 @@ model = dict(
         type='PointPillarsScatter', in_channels=64, output_shape=bev_grid_map_size),
     pts_backbone=dict(
         type='PcdetBackbone',
-        in_channels=64,
+        in_channels=feat_channel,
         layer_nums=[3, 5, 5],
         layer_strides=[2, 2, 2],
-        num_filters=[64, 128, 256],
+        num_filters=[feat_channel, 128, 256],
         upsample_strides=[1, 2, 4],
         num_upsample_filters=[128, 128, 128],
         ),
@@ -89,8 +98,8 @@ model = dict(
         anchor_generator=dict(
             type='AlignedAnchor3DRangeGenerator',
             ranges=[
-                [0, -10.0, -0.4, 100.0, 10.0, -0.4],
-                [0, -10.0, -0.6, 100.0, 10.0, -0.6]
+                [0, -10.0, -1.78, 100.0, 10.0, -1.78],
+                [0, -10.0, -0.3, 100.0, 10.0, -0.3]
             ],
             sizes=[[4.63, 1.97, 1.74], # car
                    [12.5, 2.94, 3.47],  # truck
@@ -139,12 +148,10 @@ model = dict(
         max_num=500)))
 # dataset settings
 dataset_type = 'PlusKittiDataset'
-l4_data_root = '/home/wancheng.shen/datasets/CN_L4_origin_data/'
-l4_benchmark_root = '/home/wancheng.shen/datasets/CN_L4_origin_benchmark/'
-l3_data_root = '/mnt/intel/jupyterhub/mrb/datasets/L4E_wo_tele/L4E_origin_data/'
-l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_wo_tele/L4E_origin_benchmark/'
-# l3_mini_data='/mnt/intel/jupyterhub/mrb/l4e_mini_data/'
-# l3_benchmark_root=l3_mini_data
+l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_data/'
+l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
+l3_benchmark_root = l3_data_root
+
 
 class_names = ['Car', 'Truck']
 input_modality = dict(use_lidar=True, use_camera=False)
@@ -196,7 +203,7 @@ train_pipeline = [
     dict(type='PointShuffle'),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
     dict(type='Collect3D', keys=['points', 'img', 'gt_bboxes_3d', 'gt_labels_3d', 
-                                 'img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+                                 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
 ]
 
 test_pipeline = [
@@ -227,7 +234,7 @@ test_pipeline = [
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+            dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
         ])
 ]
 
@@ -240,7 +247,7 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             data_root=l3_data_root,
-            ann_file=l3_data_root + 'Kitti_L4_data_mm3d_infos_train.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
             # ann_file=l3_data_root + 'l4e_mini_data_train.pkl',
             split='training',
             pts_prefix='pointcloud',
@@ -257,7 +264,7 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=l3_data_root,
-        ann_file=l3_data_root + 'Kitti_L4_data_mm3d_infos_val.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
         # ann_file=l3_data_root + 'l4e_mini_data_val.pkl',
         split='training',
         pts_prefix='pointcloud',
@@ -272,7 +279,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
-        ann_file=l3_benchmark_root + 'Kitti_L4_data_mm3d_infos_val.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
         # data_root=l3_data_root,
         # ann_file=l3_data_root + 'l4e_mini_data_test.pkl',
         split='training',
@@ -300,8 +307,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 runner = dict(max_epochs=80)
 
 # Use evaluation interval=2 reduce the number of evaluation timese
-evaluation = dict(interval=10)
-checkpoint_config = dict(interval=10)
+evaluation = dict(interval=5)
+checkpoint_config = dict(interval=3)
 workflow = [('train', 2), ('val', 1)]
 # resume_from ='/mnt/intel/jupyterhub/mrb/code/mm3d_bevfusion/train_log/mm3d/pcdet_bev_fusion/20221020-095511/epoch_4.pth'
-find_unused_parameters=True

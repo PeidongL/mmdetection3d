@@ -14,14 +14,14 @@ offline_feature_resize_shape=(45, 80)
 find_unused_parameters=False
 if use_offline_img_feat:
     find_unused_parameters=True
-used_sensors = {'use_lidar': True,
+used_sensors = {'use_lidar': False,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
     'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
     'y': [point_cloud_range[1], point_cloud_range[4], voxel_size[1]],
     'z': [-10.0, 10.0, 20.0],
-    'depth': [1.0, 72, 1],
+    'depth': [1.0, 100, 1],
 }
 bev_grid_map_size = [
     int((grid_config['y'][1] - grid_config['y'][0]) / voxel_size[1]),

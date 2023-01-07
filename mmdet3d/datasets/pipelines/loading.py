@@ -1199,7 +1199,11 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
             if self.to_float32:
                 img = img.astype(np.float32)
 
-            feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+            #l3 dataset
+            feature_name = filename.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+            if not os.path.exists(feature_name): # l4 old dataset
+                feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+        
             results['filename'].append(filename)
             results['ori_filename'].append(filename)
             if img.shape[0] == 1080:

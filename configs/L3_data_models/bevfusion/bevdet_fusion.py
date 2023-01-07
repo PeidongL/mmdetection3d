@@ -10,18 +10,18 @@ using_tele=False
 use_sync_bn=True # set Fasle when debug
 used_cameras = 4
 use_offline_img_feat=True
-offline_feature_resize_shape=(48, 88)
+offline_feature_resize_shape=(45, 80)
 find_unused_parameters=False
 if use_offline_img_feat:
     find_unused_parameters=True
-used_sensors = {'use_lidar': True,
-               'use_camera': False,
+used_sensors = {'use_lidar': False,
+               'use_camera': True,
                'use_radar': False}
 grid_config = {
     'x': [point_cloud_range[0], point_cloud_range[3], voxel_size[0]],
     'y': [point_cloud_range[1], point_cloud_range[4], voxel_size[1]],
     'z': [-10.0, 10.0, 20.0],
-    'depth': [1.0, 72, 1],
+    'depth': [1.0, 100, 1],
 }
 bev_grid_map_size = [
     int((grid_config['y'][1] - grid_config['y'][0]) / voxel_size[1]),
@@ -340,6 +340,7 @@ data = dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
         ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        # ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_5314.pkl',
         split='training',
         pts_prefix='pointcloud',
         samples_per_gpu=8,

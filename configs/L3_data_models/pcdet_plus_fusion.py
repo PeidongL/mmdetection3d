@@ -42,7 +42,7 @@ model = dict(
     #     out_channels=64,
     #     accelerate=False,
     # ),
-    img_neck=dict(type='HeightDepthFusion',
+    img_view_transformer=dict(type='HeightDepthFusion',
         in_channels=64,
         out_channels=64,
         image_size=(540, 960),
