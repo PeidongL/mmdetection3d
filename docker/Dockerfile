@@ -111,6 +111,7 @@ RUN pip install pycuda \
     plyfile \
     scikit-image \
     tensorboard \
+    gitpython \
     tensorboardX \
     trimesh==2.35.39 -i https://pypi.tuna.tsinghua.edu.cn/simple
 
