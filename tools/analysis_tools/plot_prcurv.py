@@ -51,32 +51,47 @@ def main(exps: List[str],indexs: List[int],distance: int,save_plot_path: str):
         for j in range(exp_len):
             tpr_file = os.path.join(exps[j], tpr_files[j][i])
             tpr = pd.read_csv(tpr_file, header=None, names=schema)
-            label_name = exps[j].split('/')[-2] + '_e' + str(indexs[j])
+            label_name = exps[j].split('/')[-3] + '/' + exps[j].split('/')[-2] + '_e' + str(indexs[j])
             plt.plot(tpr['rec'], tpr['pr'], "*-", label=label_name)
         plt.legend(loc="lower left")
         plt.savefig(os.path.join(save_plot_path, '%s.png'%plt_title))
 
 if __name__ == '__main__':
     # fire.Fire(main)
-    root_dir = '/mnt/intel/jupyterhub/mrb/'
+    root_dir = '/mnt/intel/jupyterhub/mrb/work_dirs'
     exps = [
-"work_dirs/L4_data_models/lss_bevfusion_48x96/lss_bevfusion_lidar/eval",
-"work_dirs/L4_data_models/lss_bevfusion_48x96/lss_bevfusion_fusion/eval",
+    # "L4_data_models/lss_bevfusion_48x96/lss_bevfusion_lidar/eval",
+    # "L4_data_models/lss_bevfusion_48x96/lss_bevfusion_fusion/eval",
 
-"work_dirs/L4_data_models/bevfusion_48x96/bevdet2.0_lidar_only/eval",
-"work_dirs/L4_data_models/bevfusion_48x96/bevdet2.0_fusion/eval",
-"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_fusion/eval",
-
-# camera only
-"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_camera/eval",
-"work_dirs/L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_epoch80/eval",
-
+    # "L4_data_models/bevfusion_48x96/bevdet2.0_lidar_only/eval",
+    # "L4_data_models/bevfusion_48x96/bevdet2.0_fusion/eval",
+    # "L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_fusion/eval",
+    # # camera only
+    # "L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_camera/eval",
+    # "L4_data_models/pcdet_L4_bev_fusion_height_48x96/bevheight_epoch80/eval",
     ]
-    indexs = [ 80,80,80,80,80,80,160]
-    
     
     distance = 100
-    save_plot_path = './'
-    for idx in range(len(exps)):
-        exps[idx] = os.path.join(root_dir, exps[idx])
-    main(exps, indexs, distance, save_plot_path)
+    exps = {
+    "L3_data_models/bevdet_fusion/lidar/eval": 800, # lidar 800
+    "L3_data_models/bevdet_fusion/camera_fix_img_resize_bug_resume/eval": 60, 
+    # bev depth 
+    "L3_data_models/bevdepth_fusion/camera_resume/eval": 430,
+    "L3_data_models/bevdepth_fusion/camera_retrain_0_100/eval": 800, # 800
+    "L3_data_models/bevdepth_fusion/fusion_resume/eval": 560, # 560
+
+    "L3_data_models/bevdet_fusion/camera_fea_45x80_depth_1x100/eval": 800, # 800
+    "L3_data_models/pcdet_bev_fusion_height_pure/camera/eval": 160, #160
+    "L3_data_models/bevdet_fusion/bevdet2.0_fusion_fix_resize_bug/eval": 800, # 800
+    "L3_data_models/bevdet_fusion/camera_fix_img_resize_bug_resume/eval": 60, # 60
+    }
+
+    
+    
+    save_plot_path = os.path.split(__file__)[0]
+    indexs = list(exps.values())
+    exps_list = []
+    for exp in list(exps.keys()):
+        exps_list.append(os.path.join(root_dir, exp))
+        
+    main(exps_list, indexs, distance, save_plot_path)
