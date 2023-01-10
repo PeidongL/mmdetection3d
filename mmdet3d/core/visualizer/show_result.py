@@ -7,6 +7,7 @@ import trimesh
 import cv2
 from mmcv.parallel import DataContainer
 import torch
+from tools.analysis_tools.plot_box_on_bev import plot_gt_det_cmp
 
 from .image_vis import (draw_camera_bbox3d_on_img, draw_depth_bbox3d_on_img,
                         draw_lidar_bbox3d_on_img, project_pts_on_img)
@@ -375,7 +376,20 @@ def show_plus_multi_cams_result(input, img,
     mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)    
     
 
-def show_plus_bevdet20_format_project_bbox_mutlicam(input,
+def concate_img(img0, img1):
+    h0,w0=img0.shape[0],img0.shape[1]  #cv2 读取出来的是h,w,c
+    h1,w1=img1.shape[0],img1.shape[1]
+    h=max(h0,h1)
+    w=max(w0,w1)
+    org_image=np.ones((h,w,3),dtype=np.uint8)*255
+    trans_image=np.ones((h,w,3),dtype=np.uint8)*255
+
+    org_image[:h0,:w0,:]=img0[:,:,:]
+    trans_image[:h1,:w1,:]=img1[:,:,:]
+    all_image = np.hstack((org_image[:,:w0,:], trans_image[:,:w1,:]))
+    return all_image
+
+def show_plus_bevdet20_format_project_bbox_mutlicam(input, point_cloud_range, /, 
                       gt_bbox_color=(61, 102, 255),
                       pred_bbox_color=(241, 101, 72)):
     if isinstance(input['points'], DataContainer):
@@ -400,7 +414,6 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
         (imgs, rots, trans, intrins, post_rots,
         post_trans, bda_rot) = input['img_inputs']
     
-    draw_bbox = draw_lidar_bbox3d_on_img
     cam_nums = len(show_imgs)
     camera_names = ['front_left_camera', 'front_right_camera',
                     'side_left_camera', 'side_right_camera',
@@ -413,6 +426,9 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
     
     show_img_list = []
     sample_idx = input['img_metas'].data['sample_idx'].split('.')[0]
+    
+    bev_img = plot_gt_det_cmp(points, gt_bboxes.tensor.numpy(), [], point_cloud_range)
+    
     for idx in range(cam_nums):
         show_img = show_imgs[idx]
         if type(show_img) == torch.Tensor: # raw_img, not canvas
@@ -469,7 +485,12 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input,
     new_img[front_image_size[1]:new_size[1],0:front_image_size[0]] = show_img_list[2]
     new_img[front_image_size[1]:new_size[1],front_image_size[0]:new_size[0]] = show_img_list[3]
     # img[front_image_size[1]:new_size[1], side_left_offset_x+side_image_size[0]:side_left_offset_x+side_image_size[0]*2] = img_side_right
-    mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)
+    
+    all_img = concate_img(new_img, bev_img)
+    # mmcv.imshow(new_img, win_name='project_bbox3d_img', wait_time=0)
+    mmcv.imshow(all_img, win_name='all', wait_time=0)
+    
+    
     
     
     

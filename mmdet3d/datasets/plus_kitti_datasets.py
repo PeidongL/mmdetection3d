@@ -21,6 +21,7 @@ from ..core.bbox import (Box3DMode, CameraInstance3DBoxes, Coord3DMode,
 from .builder import DATASETS
 from .custom_3d import Custom3DDataset
 from .pipelines import Compose
+from tools.analysis_tools.plot_box_on_bev import plot_gt_det_cmp
 
 from .kitti_dataset import KittiDataset
 from tensorboardX import SummaryWriter
@@ -607,8 +608,6 @@ class PlusKittiDataset(KittiDataset):
         return all_image
     
     def save_eval_results(self, dets_pcdet, results_dir):
-        from .utils import plot_gt_det_cmp
-        
         for i, result in enumerate(dets_pcdet):
             data_info = self.data_infos[i]
             pts_path = data_info['point_cloud']['lidar_idx']
