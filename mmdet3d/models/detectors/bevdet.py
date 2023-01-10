@@ -483,6 +483,23 @@ class BEVDepth(BEVDet):
         return losses
 
 @DETECTORS.register_module()
+class BEVMultiDepth(BEVDepth):
+    def image_encoder(self, img):
+        imgs = img
+        B, N, C, imH, imW = imgs.shape
+        imgs = imgs.view(B * N, C, imH, imW)
+        x = self.img_backbone(imgs)
+        if self.with_img_neck:
+            x = self.img_neck(x)
+            # for feat in x:
+            #     print("size: ", feat.size())
+            # if type(x) in [list, tuple]:
+            #     x = x[0]
+        # _, output_dim, ouput_H, output_W = x.shape
+        # x = x.view(B, N, output_dim, ouput_H, output_W)
+        return x
+
+@DETECTORS.register_module()
 class BEVHeight(BEVDepth):
     @force_fp32()
     def get_depth_loss(self, depth_gt, depth):

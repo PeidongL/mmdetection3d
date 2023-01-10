@@ -10,9 +10,11 @@ from ..vtransforms.lss import LSSTransform
 from ..vtransforms.depth_lss import DepthLSSTransform
 from .view_transformer import LSSViewTransformer, LSSViewTransformerBEVDepth
 from .view_transformer_height import LSSViewTransformerBEVHeightDepth
+from .view_transformer_height_up_depth import LSSViewTransformerBEVHeightMulDepth
 
 __all__ = [
     'FPN', 'SECONDFPN', 'OutdoorImVoxelNeck', 'PointNetFPNeck', 'DLANeck',
     'LSSViewTransformer', 'CustomFPN', 'FPN_LSS', 'LSSViewTransformerBEVDepth',
-    'LSSTransform', 'DepthLSSTransform', 'LSSViewTransformerBEVHeightDepth'
+    'LSSTransform', 'DepthLSSTransform', 'LSSViewTransformerBEVHeightDepth',
+    'LSSViewTransformerBEVHeightMulDepth'
 ]

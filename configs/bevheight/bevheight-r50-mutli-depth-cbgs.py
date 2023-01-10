@@ -42,33 +42,36 @@ voxel_size = [0.1, 0.1, 0.2]
 numC_Trans = 80
 
 model = dict(
-    type='BEVDepth',
+    type='BEVMultiDepth',
     img_backbone=dict(
         pretrained='torchvision://resnet50',
         type='ResNet',
         depth=50,
         num_stages=4,
-        out_indices=(2, 3),
+        out_indices=(1, 2, 3),
         frozen_stages=-1,
         norm_cfg=dict(type='BN', requires_grad=True),
         norm_eval=False,
         with_cp=True,
         style='pytorch'),
     img_neck=dict(
-        type='CustomFPN',
-        in_channels=[256, 512, 1024, 2048],
+        type='FPN',
+        in_channels=[512, 1024, 2048],
         out_channels=512,
-        num_outs=1,
         start_level=0,
-        out_ids=[0, 1, 2, 3]),
+        add_extra_convs='on_output',
+        num_outs=3,
+        relu_before_extra_convs=True),
     img_view_transformer=dict(
-        type='LSSViewTransformerBEVHeightDepth',
+        type='LSSViewTransformerBEVHeightMulDepth',
         grid_config=grid_config,
         data_config=data_config,
         pc_range=point_cloud_range,
         numC_Trans=numC_Trans,
+        numC_input=512,
         depthnet_cfg=dict(use_dcn=False),
-        downsample=16),
+        downsamples=[8, 16, 32],
+        loss_depth_weight=1.0),
     img_bev_encoder_backbone=dict(
         type='CustomResNet',
         numC_input=numC_Trans,
@@ -249,7 +252,7 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=200,
     warmup_ratio=0.001,
-    step=[16,19])
+    step=[20,])
 runner = dict(type='EpochBasedRunner', max_epochs=20)
 
 custom_hooks = [
