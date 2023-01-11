@@ -11,6 +11,9 @@ use_sync_bn=True # set Fasle when debug
 used_cameras = 4
 use_offline_img_feat=True
 offline_feature_resize_shape=(45, 80)
+img_feat_channel=64
+if not use_offline_img_feat: #resetNet: 512
+    img_feat_channel=512
 find_unused_parameters=False
 if use_offline_img_feat:
     find_unused_parameters=True
@@ -80,7 +83,7 @@ model = dict(
         grid_config=grid_config,
         input_size=(540,960),
         feature_size=offline_feature_resize_shape,
-        in_channels=64,
+        in_channels=img_feat_channel,
         out_channels=numC_Trans,
         downsample=16),
     img_bev_encoder_backbone=dict(
@@ -295,7 +298,7 @@ eval_pipeline = [
     #     type='GlobalRotScaleTrans',
     #     rot_range=[-0.78539816, 0.78539816],
     #     scale_ratio_range=[0.95, 1.05]),
-    dict(type='PointsRangeFilter', point_cloud_range=[-24, -24, -2, 72, 24, 6]),
+    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     
     dict(type='Collect3D', keys=['points', 'img'])
 ]
