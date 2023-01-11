@@ -396,7 +396,7 @@ class HeightDepthTransform(DepthLSSTransform):
 
         depth_resize_list = []
         for i in range(batch_size):
-            out = self.resize_feature(self.feature_size[0]*4, self.feature_size[1]*4, depth[i])
+            out = F.interpolate(depth[i], (self.feature_size[0]*4, self.feature_size[1]*4), mode='bilinear', align_corners=False)
             depth_resize_list.append(out)
             
         depth = torch.stack(depth_resize_list)
@@ -426,17 +426,6 @@ class HeightDepthTransform(DepthLSSTransform):
         output = output.permute(0, 2, 1).contiguous().view(batch_size, -1, self.bev_h, self.bev_w)
 
         return output 
-
-def resize_feature(self, out_h, out_w, in_feat):
-    new_h = torch.linspace(-1, 1, out_h).view(-1, 1).repeat(1, out_w)
-    new_w = torch.linspace(-1, 1, out_w).repeat(out_h, 1)
-    grid = torch.cat((new_h.unsqueeze(2), new_w.unsqueeze(2)), dim=2)
-    grid = grid.unsqueeze(0)
-    grid = grid.expand(in_feat.shape[0], *grid.shape[1:]).to(in_feat)
-    
-    out_feat = F.grid_sample(in_feat, grid=grid, mode='bilinear', align_corners=True)
-    
-    return out_feat
 
 def feature_sampling(feat, reference_points, depth_prob, img_offset, pc_range, lidar_to_img, img_metas):
     reference_points = reference_points.clone()
@@ -671,7 +660,7 @@ class HeightDepthFusion(HeightDepthTransform):
 
         depth_resize_list = []
         for i in range(batch_size):
-            out = self.resize_feature(self.feature_size[0]*4, self.feature_size[1]*4, depth[i])
+            out = F.interpolate(depth[i], (self.feature_size[0]*4, self.feature_size[1]*4), mode='bilinear', align_corners=False)
             depth_resize_list.append(out)
             
         depth = torch.stack(depth_resize_list)

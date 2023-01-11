@@ -1678,17 +1678,6 @@ class PrepareImageInputs(object):
         results['raw_img'] = raw_imgs
         results['sensor2sensors'] = sensor2sensors
         return (imgs, rots, trans, intrins, post_rots, post_trans)
-
-    def resize_feature(self, out_h, out_w, in_feat):
-        new_h = torch.linspace(-1, 1, out_h).view(-1, 1).repeat(1, out_w)
-        new_w = torch.linspace(-1, 1, out_w).repeat(out_h, 1)
-        grid = torch.cat((new_h.unsqueeze(2), new_w.unsqueeze(2)), dim=2)
-        grid = grid.unsqueeze(0)
-        grid = grid.expand(in_feat.shape[0], *grid.shape[1:]).to(in_feat)
-        
-        out_feat = F.grid_sample(in_feat, grid=grid, mode='bilinear', align_corners=True)
-        
-        return out_feat
     
     def get_inputs_plus(self, results, flip=None, scale=None):
         imgs = []
@@ -1752,7 +1741,7 @@ class PrepareImageInputs(object):
                 
                 img_feature = torch.Tensor(np.load(feature_name))
                 if img_feature.shape[-2:] != self.offline_feature_resize_shape:
-                    resized_feature = self.resize_feature(*self.offline_feature_resize_shape, img_feature)
+                    resized_feature = F.interpolate(img_feature, self.offline_feature_resize_shape[:2], mode='bilinear', align_corners=False)
                     img_features.append(resized_feature)
                 else:
                     img_features.append(img_feature)

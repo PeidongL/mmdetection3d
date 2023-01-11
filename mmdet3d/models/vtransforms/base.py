@@ -259,7 +259,7 @@ class BaseDepthTransform(BaseTransform):
 
         depth_resize_list = []
         for i in range(batch_size):
-            out = self.resize_feature(self.feature_size[0]*4, self.feature_size[1]*4, depth[i])
+            out = F.interpolate(depth[i], (self.feature_size[0]*4, self.feature_size[1]*4), mode='bilinear', align_corners=False)
             depth_resize_list.append(out)
             
         depth = torch.stack(depth_resize_list)
@@ -267,15 +267,3 @@ class BaseDepthTransform(BaseTransform):
         x = self.get_cam_feats(img_feats, depth) # img: [1, 6, 256, 32, 88]  depth: [1, 6, 1, 256, 704]  x: torch.Size([1, 6, 118, 32, 88, 80])
         x = self.bev_pool(geom, x) # geom: [1, 6, 118, 32, 88, 3]   x: [1, 6, 118, 32, 88, 80], 118个深度离散值, 通道是80
         return x
-    
-    def resize_feature(self, out_h, out_w, in_feat):
-        new_h = torch.linspace(-1, 1, out_h).view(-1, 1).repeat(1, out_w)
-        new_w = torch.linspace(-1, 1, out_w).repeat(out_h, 1)
-        grid = torch.cat((new_h.unsqueeze(2), new_w.unsqueeze(2)), dim=2)
-        grid = grid.unsqueeze(0)
-        grid = grid.expand(in_feat.shape[0], *grid.shape[1:]).to(in_feat)
-        
-        out_feat = F.grid_sample(in_feat, grid=grid, mode='bilinear', align_corners=True)
-        
-        return out_feat
-        
