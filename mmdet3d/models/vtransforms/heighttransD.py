@@ -116,11 +116,13 @@ class IHRLayer(nn.Module):
             inputs[0], reference_points, depth_prob, img_offset, point_cloud_range, lidar_to_img[:,0:2,...], img_metas)
             output = torch.nan_to_num(output)
             bev_mask = torch.nan_to_num(bev_mask)
+            output= output * bev_mask
             
             reference_points_3d, output_side, bev_mask = feature_sampling(
             inputs[1], reference_points, depth_prob, None, point_cloud_range, lidar_to_img[:,2:4,...], img_metas)
             output_side = torch.nan_to_num(output_side)
             bev_mask = torch.nan_to_num(bev_mask)
+            output_side= output_side * bev_mask
 
             output = torch.cat((output, output_side), -2)
             output = output * attention_weights.sigmoid()
