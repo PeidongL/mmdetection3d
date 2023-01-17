@@ -114,7 +114,7 @@ def plot_boxes(points, boxes, bev_range, scores=None, label_strings=None, path=N
     cv2.imwrite(path, canvas)
 
 
-def plot_gt_boxes(points, gt_boxes, bev_range, lidar_camera_idx, name=None):
+def plot_gt_boxes(points, gt_boxes, bev_range, lidar_camera_idx=None):
     """ Visualize the ground truth boxes.
     :param points: lidar points, [N, 3]
     :param gt_boxes: gt boxes, [N, [x, y, z, l, w, h, r]]
@@ -140,33 +140,17 @@ def plot_gt_boxes(points, gt_boxes, bev_range, lidar_camera_idx, name=None):
     for x, y1, y2 in zip(x_range, y1_range, y2_range):
         cv2.line(canvas, (y1, x), (y2, x), (255, 255, 255), 2)
 
-    point_colors = camera_color[lidar_camera_idx]
-
     # Plot the point cloud
     loc_x = ((points[:, 0] - bev_range[0]) / steps).astype(int)
     loc_x = np.clip(loc_x, 0, pixels_x - 1)
     loc_y = ((points[:, 1] - bev_range[1]) / steps).astype(int)
     loc_y = np.clip(loc_y, 0, pixels_y - 1)
     canvas[loc_x, loc_y] = [0, 255, 255]
-    canvas[loc_x, loc_y] = point_colors
-
-    # for idx in range(points.shape[0]):
-    #     time0 = time()
-    #     point = points[idx, :]
-    #     time1 = time()
-    #     print("checkpoint1:", time1 - time0)
-    #     if bev_range[0] <= point[0] <= bev_range[3] and \
-    #        bev_range[1] <= point[1] <= bev_range[4] and \
-    #        bev_range[2] <= point[2] <= bev_range[5]:
-    #         time2 = time()
-    #         print("checkpoint2:", time2 - time1)
-    #         loc_x = int((point[0] - bev_range[0]) / steps)
-    #         loc_y = int((point[1] - bev_range[1]) / steps)
-    #         time3 = time()
-    #         print("checkpoint3:", time3 - time2)
-    #         canvas[loc_x, loc_y] = [0, 255, 255]
-    #         time4 = time()
-    #         print("checkpoint4:", time4 - time3)
+    
+    
+    if lidar_camera_idx:
+        point_colors = camera_color[lidar_camera_idx]
+        canvas[loc_x, loc_y] = point_colors
 
     # Plot the gt boxes
     gt_color = (0, 255, 0)
@@ -203,12 +187,6 @@ def plot_gt_boxes(points, gt_boxes, bev_range, lidar_camera_idx, name=None):
         cv2.putText(canvas, camera_names[idx], (15, v), fontFace=cv2.FONT_HERSHEY_SIMPLEX,
                     fontScale=1.0, color=idx_color, thickness=2)
 
-    # cv2.namedWindow("gt_box", 2)
-    # cv2.imshow("gt_box", canvas)
-    # cv2.waitKey(10)
-
-    # print(name)
-    cv2.imwrite("%s.jpg" % name, canvas)
     return canvas
 
 

@@ -136,7 +136,7 @@ def get_lidar_colors(lidar_intensity):
     return pt_colors
 
 
-def get_paint_image(img_raw, lidar_raw, intrc, imu_to_cam, camera_idx, lidar_camera_idx, boxes):
+def get_paint_image(img_raw, lidar_raw, intrc, imu_to_cam, camera_idx=None, lidar_camera_idx=None, boxes=None):
     paint_img = copy.deepcopy(img_raw)
     lidar_pts = copy.deepcopy(lidar_raw)
 
@@ -156,9 +156,10 @@ def get_paint_image(img_raw, lidar_raw, intrc, imu_to_cam, camera_idx, lidar_cam
     width = paint_img.shape[1]
     true_where_point_on_img = (us >= 0) & (us < width) \
                               & (vs >= 0) & (vs < height) & (lidar_pts[:, 2] > 0)
-    # NOTE(swc): get the camera idx of every pcd point +=1 to
-    #  avoid the conflict between default color and the first cam color
-    lidar_camera_idx[true_where_point_on_img] = camera_idx + 1
+    if camera_idx and lidar_camera_idx:
+        # NOTE(swc): get the camera idx of every pcd point +=1 to
+        #  avoid the conflict between default color and the first cam color
+        lidar_camera_idx[true_where_point_on_img] = camera_idx + 1
 
     img4painting = paint_img.copy()
     # NOTE(swc): set points transparency
