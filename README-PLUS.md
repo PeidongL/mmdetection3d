@@ -20,9 +20,9 @@ conda create --name mm3d-master python=3.8 -y
 conda activate mm3d-master
 
 # cuda 10.2
-conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=10.2 -c pytorch
+conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=10.2 -c pytorch -y 
 # cuda 11.3
-conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge
+conda install pytorch==1.10.1 torchvision==0.11.2 torchaudio==0.10.1 cudatoolkit=11.3 -c pytorch -c conda-forge -y 
 
 # following mim installation has nothing to do with cuda version
 pip install tensorboardX setuptools==59.5.0 openmim nvitop gitpython
