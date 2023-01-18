@@ -1,14 +1,19 @@
 _base_ = [
-    '../_base_/schedules/cyclic_40e.py', '../_base_/default_runtime.py'
+    '../../_base_/schedules/cyclic_40e.py', '../../_base_/default_runtime.py'
 ]
 
 # model settings
 voxel_size = [0.25, 0.25, 8]
 point_cloud_range = [0, -10, -2, 100, 10, 6]
+using_tele=False
 # model settings
 use_sync_bn=True # set Fasle when debug
 used_cameras = 4
 use_offline_img_feat=True
+offline_feature_resize_shape=(45, 80)
+img_feat_channel=64
+if not use_offline_img_feat: #resetNet: 512
+    img_feat_channel=512
 find_unused_parameters=False
 if use_offline_img_feat:
     find_unused_parameters=True
@@ -28,57 +33,84 @@ bev_grid_map_size = [
 feat_channel = 0
 if used_sensors['use_lidar']: feat_channel+=64 
 if used_sensors['use_camera']: feat_channel+=64 
+data_config = {
+    'cams': [
+        'front_left_camera', 'front_right_camera', 'side_left_camera', 'side_right_camera'
+    ],
+    'Ncams':
+    4,
+    'input_size': (540, 960),
+    'src_size': (540, 960),
 
+    # Augmentation
+    'resize': (-0.06, 0.11),
+    'rot': (-5.4, 5.4),
+    'flip': True,
+    'crop_h': (0.0, 0.0),
+    'resize_test': 0.00,
+}
+bda_aug_conf = dict(
+    rot_lim=(-22.5, 22.5),
+    scale_lim=(0.95, 1.05),
+    flip_dx_ratio=0.0,  #dx应该等于0，如果只有前向数据，会把前向的点云翻转到后向，可能为空，导致训练报错
+    flip_dy_ratio=0.5)
+numC_Trans = 80
 
 model = dict(
-    type='BEVFusion',
+    type='BEVDepth',
     used_sensors=used_sensors,
-    use_offline_img_feat=use_offline_img_feat,
+    use_offline_feature=use_offline_img_feat,
     img_backbone=dict(
+        pretrained='torchvision://resnet50',
         type='ResNet',
         depth=50,
         num_stages=4,
-        out_indices=(0, 1, 2, 3),
-        frozen_stages=1,
-        norm_cfg=dict(type='BN', requires_grad=False),
-        norm_eval=True,
-        style='caffe'),
-    # img_neck=dict(type='LSSViewTransformer',
-    #     grid_config=grid_config,
-    #     feature_size=(104, 200),
-    #     in_channels=64,
-    #     out_channels=64,
-    #     accelerate=False,
-    # ),
-    img_view_transformer=dict(type='HeighTransform',
-        in_channels=64,
-        out_channels=64,
-        used_cameras=4,
-        image_size=(540, 960),
-        feature_size=(104, 200),
-        point_cloud_range = point_cloud_range,
-        bev_grid_map_size = bev_grid_map_size,
-        xbound=grid_config['x'],
-        ybound=grid_config['y'],
-        zbound=grid_config['z'],
-        dbound=grid_config['depth'],
-        ),
+        out_indices=(2, 3),
+        frozen_stages=-1,
+        norm_cfg=dict(type='BN', requires_grad=True),
+        norm_eval=False,
+        with_cp=True,
+        style='pytorch'),
+    img_neck=dict(
+        type='CustomFPN',
+        in_channels=[1024, 2048],
+        out_channels=512,
+        num_outs=1,
+        start_level=0,
+        out_ids=[0]),
+    img_view_transformer=dict(
+        type='LSSViewTransformerBEVDepth',
+        grid_config=grid_config,
+        input_size=(540,960),
+        feature_size=offline_feature_resize_shape,
+        in_channels=img_feat_channel,
+        out_channels=numC_Trans,
+        downsample=12), # ?
+    img_bev_encoder_backbone=dict(
+        type='CustomResNet',
+        numC_input=numC_Trans,
+        num_channels=[numC_Trans * 2, numC_Trans * 4, numC_Trans * 8]),
+    img_bev_encoder_neck=dict(
+        type='FPN_LSS',
+        in_channels=numC_Trans * 8 + numC_Trans * 2,
+        out_channels=64),
     pts_voxel_layer=dict(
         max_num_points=8,  # max_points_per_voxel
         point_cloud_range=point_cloud_range,
         voxel_size=voxel_size,
         max_voxels=(6000, 6000)  # (training, testing) max_voxels
     ),
-    pts_voxel_encoder=dict( #lss加到这里？
+    pts_voxel_encoder=dict(
         type='PillarFeatureNet',
         in_channels=4,
         feat_channels=[64],
         with_distance=False,
         voxel_size=voxel_size,
         use_pcdet=True,
+        legacy=False,
         point_cloud_range=point_cloud_range),
     pts_middle_encoder=dict(
-        type='PointPillarsScatter', in_channels=64, output_shape=bev_grid_map_size),
+        type='PointPillarsScatter', in_channels=64, output_shape=[80, 400]),
     pts_backbone=dict(
         type='PcdetBackbone',
         in_channels=feat_channel,
@@ -87,7 +119,7 @@ model = dict(
         num_filters=[feat_channel, 128, 256],
         upsample_strides=[1, 2, 4],
         num_upsample_filters=[128, 128, 128],
-        ),
+    ),
     pts_bbox_head=dict(
         type='Anchor3DHead',
         num_classes=2,
@@ -98,8 +130,8 @@ model = dict(
         anchor_generator=dict(
             type='AlignedAnchor3DRangeGenerator',
             ranges=[
-                [0, -10.0, -1.78, 100.0, 10.0, -1.78],
-                [0, -10.0, -0.3, 100.0, 10.0, -0.3]
+                [0, -10.0, -0.4, 100.0, 10.0, -0.4],
+                [0, -10.0, -0.6, 100.0, 10.0, -0.6]
             ],
             sizes=[[4.63, 1.97, 1.74], # car
                    [12.5, 2.94, 3.47],  # truck
@@ -139,19 +171,20 @@ model = dict(
         pos_weight=-1,
         debug=False)),
     test_cfg=dict(
-        pts=dict(use_rotate_nms=True,
+        pts=dict(
+        use_rotate_nms=True,
         nms_across_levels=False,
         nms_thr=0.01,
         score_thr=0.3,
         min_bbox_size=0,
         nms_pre=4096,
         max_num=500)))
+
 # dataset settings
 dataset_type = 'PlusKittiDataset'
 l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_data/'
 l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
 l3_benchmark_root = l3_data_root
-
 
 class_names = ['Car', 'Truck']
 input_modality = dict(use_lidar=True, use_camera=False)
@@ -179,63 +212,96 @@ db_sampler = dict(
 # PointPillars uses different augmentation hyper parameters
 train_pipeline = [
     dict(
+        type='PrepareImageInputs',
+        is_train=True, 
+        data_config=data_config,
+        is_plusdata=True,
+        use_offline_feature=use_offline_img_feat,
+        offline_feature_resize_shape=offline_feature_resize_shape),
+    dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=4,
         use_dim=4,
         point_type='float64',
+        using_tele=using_tele,
         file_client_args=file_client_args),
     dict(
-        type='LoadAnnotations3D',
-        with_bbox_3d=True,
-        with_label_3d=True,
-        file_client_args=file_client_args),
-    # dict(type='ObjectSample', db_sampler=db_sampler, use_ground_plane=True),
-    dict(type='LoadMultiCamImagesFromFile', to_float32=True),
-    # dict(type='PaintPointsWithImageFeature', used_cameras=used_cameras, drop_camera_prob=100),
-    dict(type='RandomFlipLidarOnly', flip_ratio_bev_horizontal=0.5),
-    dict(
-        type='GlobalRotScaleTrans',
-        rot_range=[-0.4, 0.4],
-        scale_ratio_range=[0.95, 1.05]),
+        type='LoadAnnotationsBEVDepth_Plus',
+        bda_aug_conf=bda_aug_conf,
+        classes=class_names),
+    dict(type='PointToMultiViewDepth_Plus', downsample=1, grid_config=grid_config),
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
-    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='PointShuffle'),
+    dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
+    dict(type='ObjectNameFilter', classes=class_names),
     dict(type='DefaultFormatBundle3D', class_names=class_names),
-    dict(type='Collect3D', keys=['points', 'img', 'gt_bboxes_3d', 'gt_labels_3d', 
-                                 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+    dict(
+        type='Collect3D', keys=['img_inputs','points', 'gt_bboxes_3d', 'gt_labels_3d', 'gt_depth', 'raw_img', 'canvas'])
 ]
 
 test_pipeline = [
+    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=True,
+         offline_feature_resize_shape=offline_feature_resize_shape),
     dict(
         type='LoadPointsFromFile',
         coord_type='LIDAR',
         load_dim=4,
         use_dim=4,
-        file_client_args=file_client_args,
-        point_type='float64'),
-    dict(type='LoadMultiCamImagesFromFile', to_float32=True),
-    # dict(type='PaintPointsWithImageFeature', used_cameras=used_cameras, drop_camera_prob=0),
+        point_type='float64',
+        using_tele=False,
+        file_client_args=file_client_args),
+    dict(
+        type='LoadAnnotationsBEVDepth_Plus',
+        bda_aug_conf=bda_aug_conf,
+        classes=class_names,
+        is_train=False),
+    dict(type='PointToMultiViewDepth_Plus', downsample=1, grid_config=grid_config),
+    # dict(
+    #     type='LoadPointsFromFile',
+    #     coord_type='LIDAR',
+    #     load_dim=5,
+    #     use_dim=5,
+    #     file_client_args=file_client_args),
     dict(
         type='MultiScaleFlipAug3D',
         img_scale=(1333, 800),
         pts_scale_ratio=1,
         flip=False,
         transforms=[
-            # dict(
-            #     type='GlobalRotScaleTrans',
-            #     rot_range=[0, 0],
-            #     scale_ratio_range=[1., 1.],
-            #     translation_std=[0, 0, 0]),
-            # dict(type='RandomFlipLidarOnly'),
-            dict(
-                type='PointsRangeFilter', point_cloud_range=point_cloud_range),
             dict(
                 type='DefaultFormatBundle3D',
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+            dict(type='Collect3D', keys=['img_inputs', 'points', 'gt_depth'])
         ])
+]
+# construct a pipeline for data and gt loading in show function
+# please keep its loading function consistent with test_pipeline (e.g. client)
+eval_pipeline = [
+    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=True),
+    dict(
+        type='LoadPointsFromFile',
+        coord_type='LIDAR',
+        load_dim=4,
+        use_dim=4,
+        point_type='float64',
+        using_tele=False,
+        file_client_args=file_client_args),
+    dict(
+        type='LoadAnnotationsBEVDepth_Plus',
+        bda_aug_conf=bda_aug_conf,
+        classes=class_names,
+        is_train=True),
+    # dict(type='LoadMultiCamImagesFromFile', to_float32=True),
+    # dict(type='RandomFlipLidarOnly', flip_ratio_bev_horizontal=0.5),
+    # dict(
+    #     type='GlobalRotScaleTrans',
+    #     rot_range=[-0.78539816, 0.78539816],
+    #     scale_ratio_range=[0.95, 1.05]),
+    dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
+    
+    dict(type='Collect3D', keys=['points', 'img'])
 ]
 
 data = dict(
@@ -247,8 +313,8 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             data_root=l3_data_root,
-            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
-            # ann_file=l3_data_root + 'l4e_mini_data_train.pkl',
+            # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12297_0118.pkl',
             split='training',
             pts_prefix='pointcloud',
             pipeline=train_pipeline,
@@ -264,8 +330,8 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=l3_data_root,
-        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
-        # ann_file=l3_data_root + 'l4e_mini_data_val.pkl',
+        # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
         split='training',
         pts_prefix='pointcloud',
         pipeline=test_pipeline,
@@ -279,9 +345,8 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
-        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
-        # data_root=l3_data_root,
-        # ann_file=l3_data_root + 'l4e_mini_data_test.pkl',
+        # ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
         split='training',
         pts_prefix='pointcloud',
         samples_per_gpu=8,
@@ -295,7 +360,7 @@ data = dict(
         file_client_args=file_client_args))
 # In practice PointPillars also uses a different schedule
 # optimizer
-lr = 0.001
+lr = 0.0004
 optimizer = dict(lr=lr)
 # max_norm=35 is slightly better than 10 for PointPillars in the earlier
 # development of the codebase thus we keep the setting. But we does not
@@ -307,7 +372,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 runner = dict(max_epochs=80)
 
 # Use evaluation interval=2 reduce the number of evaluation timese
-evaluation = dict(interval=5)
-checkpoint_config = dict(interval=3)
+evaluation = dict(interval=10, pipeline=eval_pipeline)
+checkpoint_config = dict(interval=5)
 workflow = [('train', 2), ('val', 1)]
-# resume_from ='/mnt/intel/jupyterhub/mrb/code/mm3d_bevfusion/train_log/mm3d/pcdet_bev_fusion/20221020-095511/epoch_4.pth'
+# resume_from = '/mnt/intel/jupyterhub/swc/train_log/mm3d/prefusion_L3_vehicle_160e_p6000_pt8_v_025/20220929-135421/epoch_18.pth'

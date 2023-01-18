@@ -248,7 +248,7 @@ def main():
     progress_bar = mmcv.ProgressBar(len(dataset))
 
     for input in dataset:
-        if vis_task in ['det', 'multi_modality-det', 'plus-det']:
+        if vis_task in ['det', 'multi_modality-det']:
             # show 3D bboxes on 3D point clouds
             show_det_data(input, args.output_dir, show=args.online)
         if vis_task in ['multi_modality-det', 'mono-det']:
@@ -262,8 +262,10 @@ def main():
             # show 3D segmentation mask on 3D point clouds
             show_seg_data(input, args.output_dir, show=args.online)
         elif vis_task in ['plus-det']:
+            # show point cloud in open3d
+            # show_det_data(input, args.output_dir, show=args.online)
             if 'img_inputs' in input:
-                show_plus_bevdet20_format_project_bbox_mutlicam(input)
+                show_plus_bevdet20_format_project_bbox_mutlicam(input, cfg._cfg_dict['point_cloud_range'])
             else: 
                 show_plus_project_bbox_mutlicam(
                 input,

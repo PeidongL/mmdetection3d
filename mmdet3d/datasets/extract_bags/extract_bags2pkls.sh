@@ -3,14 +3,14 @@
 config="mmdet3d/datasets/extract_bags/data_config.yaml"
 mode="training"
 # remote
-raw_bag_path="/mnt/intel/artifact_management/lidar/dataset"
+raw_bag_path="/mnt/intel/jupyterhub/swc/datasets/raw_data/L4E"
 data_path='/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data'
 calib_db='/mnt/intel/jupyterhub/swc/calib_db'
 
 echo "POINT_CLOUD_TRAINVAL: $data_path"
 
 # subfolders = ('s1' 's2' 's3')
-subfolders=('L4E_origin_0812' 'L4E_origin_1104')
+subfolders=('L4E_origin_data' 'L4E_origin_benchmark' 'L4E_origin_0812' 'L4E_origin_0812_benchmark' 'L4E_origin_1104' 'L4E_origin_1122' 'L4E_origin_1122_benchmark')
 
 for subfolder in ${subfolders[*]}; do
   echo "subfolder: $subfolder"
@@ -19,14 +19,14 @@ done
 
 function extract_bags() {
     # subfolders='s1','s2','s3'
-    subfolders='L4E_origin_0812','L4E_origin_1104'
+    subfolders='L4E_origin_data','L4E_origin_benchmark'
     docker exec -e LD_LIBRARY_PATH=/opt/ros/melodic/lib/ swc_dev bash -c \
-  "cd /home/wancheng.shen/code_hub/mmdetection3d/mmdet3d/datasets/extract_bags && python extract_bags.py main --raw_bag_path $raw_bag_path --out_path $data_path --subfolders $subfolders --calib_db $calib_db  --extract_img 1"
+  "cd /home/wancheng.shen/code_hub/mmdetection3d/mmdet3d/datasets/extract_bags && python extract_bags.py main --raw_bag_path $raw_bag_path --out_path $data_path --subfolders $subfolders --calib_db $calib_db  --extract_img 1 --is_stitch_full_image 0"
 }
 
 function generate_image_txt() {
     # subfolders = ('s1' 's2' 's3')
-    subfolders=('hard_case_origin_data' 'side_vehicle_origin_data' 'under_tree_origin_data')
+    subfolders=('L4E_origin_0812' 'L4E_origin_1122' 'L4E_origin_1104')
     for subfolder in ${subfolders[*]}; do
     python mmdet3d/datasets/extract_bags/generate_image_txt.py --folder $data_path/$subfolder/$mode \
         --out $data_path/$subfolder/$mode \
@@ -38,11 +38,11 @@ function generate_image_txt() {
 
 function generate_pkl() {
     # subfolders = ('s1' 's2' 's3')
-    subfolders=('CN_L4_origin_benchmark' 'CN_L4_origin_data' 'hard_case_origin_data' 'side_vehicle_origin_data' 'under_tree_origin_data')
-
+    subfolders=('CN_L4_origin_data' 'hard_case_origin_data' 'side_vehicle_origin_data' 'under_tree_origin_data')
+    used_sensors='lc'
     for subfolder in ${subfolders[*]}; do
-    python -m mmdet3d/datasets/extract_bags/generate_pkls.py \
-        create_L4_data_mm3d_infos $config $subfolder
+    python mmdet3d/datasets/extract_bags/generate_pkls.py \
+        create_L4_data_mm3d_infos $config $subfolder $used_sensors
     done
 }
 

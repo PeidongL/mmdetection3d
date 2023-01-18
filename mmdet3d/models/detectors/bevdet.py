@@ -182,6 +182,11 @@ class BEVDet(CenterPoint):
                 torch.Tensor should have a shape NxCxHxW, which contains
                 all images in the batch. Defaults to None.
         """
+        if img_inputs is None:
+            img_inputs = [None]
+            points = [points] if points is None else points
+            return self.simple_test(points[0], img_metas[0], img_inputs[0],
+                                    **kwargs)
         for var, name in [(img_inputs, 'img_inputs'),
                           (img_metas, 'img_metas')]:
             if not isinstance(var, list):

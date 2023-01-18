@@ -1,13 +1,6 @@
 import errno
-import logging
 import os
 import shutil
-import tempfile
-
-import munch
-import requests
-import sendfile
-import six
 
 
 def safe_rmtree(paths=None):

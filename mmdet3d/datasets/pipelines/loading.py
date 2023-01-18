@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from PIL import Image
 from pyquaternion import Quaternion
-
+import os
 import os.path as osp
 from torch.nn import functional as F
 from mmdet3d.core.points import BasePoints, get_points_type
@@ -1199,14 +1199,18 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
             if self.to_float32:
                 img = img.astype(np.float32)
 
-            feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+            #l3 dataset
+            feature_name = filename.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+            if not os.path.exists(feature_name): # l4 old dataset
+                feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+        
             results['filename'].append(filename)
             results['ori_filename'].append(filename)
             if img.shape[0] == 1080:
                 lidar2cam = results['lidar2camera'][idx]
                 
-                half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
-                results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
+                half_intri =  results['camera_intrinsics'][idx][0:2, :] / 2
+                results['camera_intrinsics'][idx][0:2, :] = half_intri
                 
                 intri = results['camera_intrinsics'][idx]
                 
@@ -1237,7 +1241,7 @@ class LoadMultiCamImagesFromFile: #这里是用新写的，因为img形式不一
                     f"channel_order='{self.channel_order}', "
                     f'file_client_args={self.file_client_args})')
         return repr_str
-
+    
 @PIPELINES.register_module()
 class PointToMultiViewDepth(object):
 
@@ -1345,7 +1349,7 @@ class PointToMultiViewDepth_Plus(object):
         coor, depth, ranks = coor[sort], depth[sort], ranks[sort]
 
         kept2 = torch.ones(coor.shape[0], device=coor.device, dtype=torch.bool)
-        print(sum(kept2))
+        # print(sum(kept2))
         kept2[1:] = (ranks[1:] != ranks[:-1]) # ？
         coor, depth = coor[kept2], depth[kept2]
         coor = coor.to(torch.long)
@@ -1674,17 +1678,6 @@ class PrepareImageInputs(object):
         results['raw_img'] = raw_imgs
         results['sensor2sensors'] = sensor2sensors
         return (imgs, rots, trans, intrins, post_rots, post_trans)
-
-    def resize_feature(self, out_h, out_w, in_feat):
-        new_h = torch.linspace(-1, 1, out_h).view(-1, 1).repeat(1, out_w)
-        new_w = torch.linspace(-1, 1, out_w).repeat(out_h, 1)
-        grid = torch.cat((new_h.unsqueeze(2), new_w.unsqueeze(2)), dim=2)
-        grid = grid.unsqueeze(0)
-        grid = grid.expand(in_feat.shape[0], *grid.shape[1:]).to(in_feat)
-        
-        out_feat = F.grid_sample(in_feat, grid=grid, mode='bilinear', align_corners=True)
-        
-        return out_feat
     
     def get_inputs_plus(self, results, flip=None, scale=None):
         imgs = []
@@ -1698,13 +1691,15 @@ class PrepareImageInputs(object):
         raw_imgs = []
         
         # sensor2sensors = []
-        for idx, filename in enumerate(results['img_info']):
+        camera_names = results['camera_names']
+        for idx, camera_names in enumerate(camera_names):
+            filename = results['img_info'][idx]
             lidar2cam = results['lidar2camera'][idx]
             # filename = cam_data['data_path']
             img = Image.open(filename)
             if img.height == 1080:
-                half_intri =  results['camera_intrinsics'][idx][0:2, 0:3] / 2
-                results['camera_intrinsics'][idx][0:2, 0:3] = half_intri
+                half_intri =  results['camera_intrinsics'][idx][0:2, :] / 2
+                results['camera_intrinsics'][idx][0:2, :] = half_intri  
                 img = img.resize((img.width//2, img.height//2))
             
             raw_imgs.append(torch.tensor(np.array(img)).float().permute(2, 0, 1).contiguous())
@@ -1739,10 +1734,14 @@ class PrepareImageInputs(object):
                 post_tran = torch.zeros(3)
                 post_rot = torch.eye(3)
 
-                feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+                #l3 dataset
+                feature_name = filename.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+                if not os.path.exists(feature_name): # l4 old dataset
+                    feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+                
                 img_feature = torch.Tensor(np.load(feature_name))
                 if img_feature.shape[-2:] != self.offline_feature_resize_shape:
-                    resized_feature = self.resize_feature(*self.offline_feature_resize_shape, img_feature)
+                    resized_feature = F.interpolate(img_feature, self.offline_feature_resize_shape[:2], mode='bilinear', align_corners=False)
                     img_features.append(resized_feature)
                 else:
                     img_features.append(img_feature)
@@ -1923,6 +1922,10 @@ class LoadAnnotationsBEVDepth_Plus(object):
 
     def __call__(self, results):
         if not self.is_train:
+            # for lidar only, there is no img_inputs
+            if 'img_inputs' not in results:
+                return results
+            
             imgs, rots, trans, intrins = results['img_inputs'][:4]
             post_rots, post_trans = results['img_inputs'][4:6]
             rotate_bda, scale_bda, flip_dx, flip_dy = self.sample_bda_augmentation()
@@ -1959,6 +1962,11 @@ class LoadAnnotationsBEVDepth_Plus(object):
             LiDARInstance3DBoxes(gt_boxes, box_dim=gt_boxes.shape[-1],
                                  origin=(0.5, 0.5, 0.5))
         results['gt_labels_3d'] = gt_labels
+        
+        # for lidar only, there is no img_inputs
+        if 'img_inputs' not in results:
+            return results
+        
         imgs, rots, trans, intrins = results['img_inputs'][:4]
         post_rots, post_trans = results['img_inputs'][4:6]
         if len(results['img_inputs']) > 6:

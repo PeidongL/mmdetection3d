@@ -30,12 +30,12 @@ RUN apt-get clean && apt-get update &&\
     apt-get install -y vim libsm6 libxext6 libxrender-dev libgl1-mesa-glx git wget libssl-dev libopencv-dev libspdlog-dev --no-install-recommends &&\
     rm -rf /var/lib/apt/lists/*
 
-RUN curl -fsSL -v -o ~/miniconda.sh -O  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh  && \
-    chmod +x ~/miniconda.sh && \
-    ~/miniconda.sh -b -p /opt/conda && \
-    rm ~/miniconda.sh && \
-    /opt/conda/bin/conda install -y python=${PYTHON_VERSION} conda-build pyyaml numpy ipython cython typing typing_extensions mkl mkl-include ninja && \
-    /opt/conda/bin/conda clean -ya
+RUN curl -fsSL -v -o ~/miniconda.sh -O  https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+RUN chmod +x ~/miniconda.sh
+RUN bash ~/miniconda.sh -b -p /opt/conda
+RUN rm ~/miniconda.sh
+RUN /opt/conda/bin/conda install -y python=${PYTHON_VERSION} conda-build pyyaml numpy ipython cython typing typing_extensions mkl mkl-include ninja
+RUN /opt/conda/bin/conda clean -ya
 
 ### pytorch
 RUN /opt/conda/bin/conda install pytorch==${TORCH_VERSION} torchvision==${TORCHVISION_VERSION} cudatoolkit=${CUDA} -c https://mirrors.tuna.tsinghua.edu.cn/anaconda/cloud/pytorch/linux-64/
@@ -104,10 +104,14 @@ RUN pip install pycuda \
     lyft_dataset_sdk \
     networkx==2.2 \
     numba==0.53.0 \
-    numpy \
+    numpy==1.23.1 \
+    setuptools==59.5.0  \
+    nvitop \
     nuscenes-devkit \
     plyfile \
     scikit-image \
     tensorboard \
+    gitpython \
+    tensorboardX \
     trimesh==2.35.39 -i https://pypi.tuna.tsinghua.edu.cn/simple
 

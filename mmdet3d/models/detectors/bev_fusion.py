@@ -88,7 +88,7 @@ class BEVFusion(MVXTwoStageDetector):
             fused_feats = img_feats
         else: # todo
             fused_feats = torch.cat((img_feats, pts_feats, rad_feats), 1)
-        fused_feats = self.fuser(fused_feats)
+        # fused_feats = self.fuser(fused_feats)
         x = self.pts_backbone(fused_feats) # second FPN
         if self.with_pts_neck:
             x = self.pts_neck(x)

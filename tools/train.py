@@ -6,6 +6,7 @@ import os
 import time
 import warnings
 from os import path as osp
+from git import Repo
 
 import datetime # for work_dir
 import pytz
@@ -202,6 +203,15 @@ def main():
         logger_name = 'mmdet'
     logger = get_root_logger(
         log_file=log_file, log_level=cfg.log_level, name=logger_name)
+    
+    # log git_info
+    git_dir = os.path.join(os.path.abspath(__file__), '../', '../')
+    current_dir = os.path.dirname(git_dir)
+    repo = Repo(os.path.join(current_dir))
+    git_branch = repo.head.reference
+    git_commit_id = repo.head.commit
+    git_info = f"branch: {git_branch}\ncommit_id: {git_commit_id}\n"
+    logger.info('Git info:\n' + git_info)
 
     # init the meta dict to record some important information such as
     # environment info and seed, which will be logged
