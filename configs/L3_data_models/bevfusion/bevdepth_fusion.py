@@ -85,7 +85,7 @@ model = dict(
         feature_size=offline_feature_resize_shape,
         in_channels=img_feat_channel,
         out_channels=numC_Trans,
-        downsample=16), # ?
+        downsample=12), # ?
     img_bev_encoder_backbone=dict(
         type='CustomResNet',
         numC_input=numC_Trans,
@@ -130,8 +130,8 @@ model = dict(
         anchor_generator=dict(
             type='AlignedAnchor3DRangeGenerator',
             ranges=[
-                [0, -10.0, -1.78, 100.0, 10.0, -1.78],
-                [0, -10.0, -0.3, 100.0, 10.0, -0.3]
+                [0, -10.0, -0.4, 100.0, 10.0, -0.4],
+                [0, -10.0, -0.6, 100.0, 10.0, -0.6]
             ],
             sizes=[[4.63, 1.97, 1.74], # car
                    [12.5, 2.94, 3.47],  # truck
@@ -313,7 +313,8 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             data_root=l3_data_root,
-            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
+            # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12297_0118.pkl',
             split='training',
             pts_prefix='pointcloud',
             pipeline=train_pipeline,
@@ -329,7 +330,8 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=l3_data_root,
-        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
         split='training',
         pts_prefix='pointcloud',
         pipeline=test_pipeline,
@@ -343,7 +345,8 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
-        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        # ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
         split='training',
         pts_prefix='pointcloud',
         samples_per_gpu=8,
@@ -357,7 +360,7 @@ data = dict(
         file_client_args=file_client_args))
 # In practice PointPillars also uses a different schedule
 # optimizer
-lr = 0.001
+lr = 0.0004
 optimizer = dict(lr=lr)
 # max_norm=35 is slightly better than 10 for PointPillars in the earlier
 # development of the codebase thus we keep the setting. But we does not
@@ -369,7 +372,7 @@ optimizer_config = dict(grad_clip=dict(max_norm=35, norm_type=2))
 runner = dict(max_epochs=80)
 
 # Use evaluation interval=2 reduce the number of evaluation timese
-evaluation = dict(interval=1, pipeline=eval_pipeline)
-checkpoint_config = dict(interval=2)
+evaluation = dict(interval=10, pipeline=eval_pipeline)
+checkpoint_config = dict(interval=5)
 workflow = [('train', 2), ('val', 1)]
 # resume_from = '/mnt/intel/jupyterhub/swc/train_log/mm3d/prefusion_L3_vehicle_160e_p6000_pt8_v_025/20220929-135421/epoch_18.pth'
