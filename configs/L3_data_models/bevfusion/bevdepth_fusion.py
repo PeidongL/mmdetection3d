@@ -85,7 +85,7 @@ model = dict(
         feature_size=offline_feature_resize_shape,
         in_channels=img_feat_channel,
         out_channels=numC_Trans,
-        downsample=16), # ?
+        downsample=12), # ?
     img_bev_encoder_backbone=dict(
         type='CustomResNet',
         numC_input=numC_Trans,
@@ -130,8 +130,8 @@ model = dict(
         anchor_generator=dict(
             type='AlignedAnchor3DRangeGenerator',
             ranges=[
-                [0, -10.0, -1.78, 100.0, 10.0, -1.78],
-                [0, -10.0, -0.3, 100.0, 10.0, -0.3]
+                [0, -10.0, -0.6, 100.0, 10.0, -0.6],
+                [0, -10.0, -0.4, 100.0, 10.0, -0.4]
             ],
             sizes=[[4.63, 1.97, 1.74], # car
                    [12.5, 2.94, 3.47],  # truck
@@ -357,7 +357,7 @@ data = dict(
         file_client_args=file_client_args))
 # In practice PointPillars also uses a different schedule
 # optimizer
-lr = 0.001
+lr = 0.0004
 optimizer = dict(lr=lr)
 # max_norm=35 is slightly better than 10 for PointPillars in the earlier
 # development of the codebase thus we keep the setting. But we does not
