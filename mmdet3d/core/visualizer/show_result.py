@@ -419,7 +419,11 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input, point_cloud_range, /,
                     'side_left_camera', 'side_right_camera',
                     'rear_left_camera', 'rear_right_camera']
     front_image_size = (canvas[0].shape[1], canvas[0].shape[0]) # width * height: 960*540
-    side_image_size = (canvas[2].shape[1], canvas[2].shape[0])
+
+    if cam_nums == 1:
+        side_image_size = front_image_size
+    else:
+        side_image_size = (canvas[2].shape[1], canvas[2].shape[0])
     new_size = (front_image_size[0]+side_image_size[0],  # 1920*1080
                 front_image_size[1]+side_image_size[1])
     new_img = np.zeros((new_size[1], new_size[0], 3), np.uint8)
@@ -478,12 +482,11 @@ def show_plus_bevdet20_format_project_bbox_mutlicam(input, point_cloud_range, /,
         #     pred_img = draw_bbox(
         #         pred_bboxes, this_img, this_mat, img_metas, color=pred_bbox_color)
         #     mmcv.imwrite(pred_img, osp.join(result_path, f'{this_filename}_pred.png'))
-            
-    new_img[0:front_image_size[1], 0:front_image_size[0]] = show_img_list[0]
-    new_img[0:front_image_size[1], front_image_size[0]:new_size[0]] = show_img_list[1]
-    
-    new_img[front_image_size[1]:new_size[1],0:front_image_size[0]] = show_img_list[2]
-    new_img[front_image_size[1]:new_size[1],front_image_size[0]:new_size[0]] = show_img_list[3]
+    if cam_nums == 1:
+        all_img = concate_img(show_img_list[0], bev_img)
+        mmcv.imshow(all_img, win_name='all', wait_time=0)
+        mmcv.imwrite(all_img, osp.join('/home/plusai/bev/mmdetection3d/show_img_train_0118', f'{sample_idx}_gt.png'))
+        return
     # img[front_image_size[1]:new_size[1], side_left_offset_x+side_image_size[0]:side_left_offset_x+side_image_size[0]*2] = img_side_right
     
     all_img = concate_img(new_img, bev_img)
