@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
+export CUDA_VISIBLE_DEVICES="4,5,6,7"
+export PORT=29509
+config=work_dirs/L3_data_models/bevdepth_fusion/camera_fix_anchor_bug/bevdepth_fusion.py
+pth=work_dirs/L3_data_models/bevdepth_fusion/camera_fix_anchor_bug/epoch_50.pth
+
 export NCCL_P2P_DISABLE=1 
-
-config=work_dirs/plus_pp_0_100m_2class/hv_pointpillars_secfpn_6x4_160e_plus-kitti-3d-2class_0-100.py
-pth=work_dirs/plus_pp_0_100m_2class/epoch_80.pth
-
-PORT=29509 \
-CUDA_VISIBLE_DEVICES="0,1,2,3" \
-./tools/dist_test.sh \
-$config $pth 4 --plus_eval
+./tools/dist_test.sh $config $pth 4 --plus_eval --plot_result
