@@ -4,7 +4,7 @@ from torch.nn import functional as F
 import torch
 import copy
 import random
-
+import os
 from mmdet3d.core.points import LiDARPoints
 
 camera_names = ['front_left_camera', 'front_right_camera',
@@ -24,9 +24,12 @@ class PaintPointsWithImageFeature:
             
         for camera_idx in range(self.used_cameras):
             cur_image_file = images_path[camera_idx]
-            cur_feature_file = cur_image_file.replace(camera_names[camera_idx], camera_names[camera_idx]+'_feature')
-            cur_feature_file = cur_feature_file.replace('.jpg', '_0.npy')
-            feature = np.load(cur_feature_file)
+            feature_name = cur_image_file.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+            if not os.path.exists(feature_name): # l4 old dataset
+                feature_name = cur_image_file.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
+            # cur_feature_file = cur_image_file.replace(camera_names[camera_idx], camera_names[camera_idx]+'_feature')
+            # cur_feature_file = cur_feature_file.replace('.jpg', '_0.npy')
+            feature = np.load(feature_name)
             feature = torch.from_numpy(feature)
             full_image_features.append(feature)
         
