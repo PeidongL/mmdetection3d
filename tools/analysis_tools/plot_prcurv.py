@@ -25,18 +25,21 @@ def main(exps: List[str],indexs: List[int],distance: int,save_plot_path: str):
         
     tpr_len = len(tpr_files[0])
     exp_len = len(exps)
+    # fig, axs = plt.subplots(1,tpr_len, figsize=(16, 8), layout='constrained')
+    fig, axs = plt.subplots(1,tpr_len, figsize=(16, 8))
     for i in range(tpr_len):
-        plt.figure(i)
         plt_title = tpr_files[0][i].split('_')[0] + f'_{distance}'
-        plt.title(plt_title)
+        axs[i].set_title(plt_title)
         for j in range(exp_len):
             tpr_file = os.path.join(exps[j], tpr_files[j][i])
             tpr = pd.read_csv(tpr_file, header=None, names=schema)
             label_name = exps[j].split('/')[-3] + '/' + exps[j].split('/')[-2] + '_e' + str(indexs[j])
             # label_name = exps[j].split('/')[-3] + '/' + exps[j].split('/')[-2]
-            plt.plot(tpr['rec'], tpr['pr'], "*-", label=label_name)
-        plt.legend(loc="lower left")
-        plt.savefig(os.path.join(save_plot_path, '%s.png'%plt_title))
+            axs[i].plot(tpr['rec'], tpr['pr'], "*-", label=label_name)
+        axs[i].legend(loc="lower left")
+        axs[i].set_xlim((0,1))
+        axs[i].set_ylim((0,1))
+    plt.savefig(os.path.join(save_plot_path, 'pr_curv.png'))
 
 if __name__ == '__main__':
     # fire.Fire(main)
@@ -77,7 +80,18 @@ if __name__ == '__main__':
         "L3_data_models/bevdepth_fusion/bevdepth_camera_fix_resize_cam_fea/eval":  [x*100 for x in range(5,7)]
         
     }
+    # root_dir=''
+    # root_dir='/home/rongbo.ma/mmdetection3d/work_dirs/'
+    # exps = {
+    #     "/home/rongbo.ma/mmdetection3d/work_dirs/L3_data_models/prefusion_L3_vehicle_160e_p6000_pt8_v_025/fix_0118_dataset/eval":
+    #         [x*10 for x in range(1,9,3)],
+    #     "/mnt/intel/jupyterhub/mrb/work_dirs/L3_data_models/prefusion/prefusion_L3_no_random/prefusion_L3_no_random_legacy_false/eval":
+    #         [x*10 for x in range(1,9,3)],
+    # }
 
+    exps = {
+    "L3_data_models/pcdet_bev_fusion_height_pure/camera/eval": [x*20 for x in range(1,9)], #160
+    }
     
     
     save_plot_path = os.path.split(__file__)[0]
