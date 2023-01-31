@@ -34,33 +34,34 @@ grid_config = {
     'x': [-51.2, 51.2, 0.8],
     'y': [-51.2, 51.2, 0.8],
     'z': [-5, 3, 8],
-    'depth': [1.0, 60.0, 1.0],
+    'depth': [1.0, 60.0, 0.5],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
 
 numC_Trans = 80
+custom_imports = dict(imports='mmcls.models', allow_failed_imports=False)
+checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext/convnext-base_3rdparty_32xb128-noema_in1k_20220222-dba4f95f.pth'
 
 model = dict(
     type='BEVDepth',
     img_backbone=dict(
-        pretrained='torchvision://resnet50',
-        type='ResNet',
-        depth=50,
-        num_stages=4,
-        out_indices=(2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=True),
-        norm_eval=False,
-        with_cp=True,
-        style='pytorch'),
+        type='mmcls.ConvNeXt',
+        arch='base',
+        out_indices=[2, 3],
+        drop_path_rate=0.4,
+        layer_scale_init_value=1.0,
+        gap_before_final_norm=False,
+        init_cfg=dict(
+            type='Pretrained', checkpoint=checkpoint_file,
+            prefix='backbone.')),
     img_neck=dict(
-        type='CustomFPN',
-        in_channels=[1024, 2048],
+        type='FPN_LSS',
+        in_channels=512+1024,
         out_channels=512,
-        num_outs=1,
-        start_level=0,
-        out_ids=[0]),
+        extra_upsample=None,
+        input_feature_index=(0,1),
+        scale_factor=2),
     img_view_transformer=dict(
         type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
@@ -68,6 +69,8 @@ model = dict(
         pc_range=point_cloud_range,
         numC_Trans=numC_Trans,
         # num_layer=6,
+        # bev_h=256, 
+        # bev_w=256,
         depthnet_cfg=dict(use_dcn=False),
         downsample=16),
     img_bev_encoder_backbone=dict(
@@ -262,4 +265,3 @@ custom_hooks = [
     ),
 ]
 
-# fp16 = dict(loss_scale='dynamic')

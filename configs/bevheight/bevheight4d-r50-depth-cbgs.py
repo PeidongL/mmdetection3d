@@ -1,4 +1,4 @@
-# Copyright (c) Phigent Robotics. All rights reserved.
+# Copyright (c) Plus. All rights reserved.
 
 _base_ = ['../_base_/datasets/nus-3d.py', '../_base_/default_runtime.py']
 # Global

@@ -31,10 +31,10 @@ data_config = {
 
 # Model
 grid_config = {
-    'x': [-51.2, 51.2, 0.8],
-    'y': [-51.2, 51.2, 0.8],
+    'x': [-51.2, 51.2, 0.4],
+    'y': [-51.2, 51.2, 0.4],
     'z': [-5, 3, 8],
-    'depth': [1.0, 60.0, 1.0],
+    'depth': [1.0, 60.0, 0.5],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
@@ -44,23 +44,19 @@ numC_Trans = 80
 model = dict(
     type='BEVDepth',
     img_backbone=dict(
-        pretrained='torchvision://resnet50',
-        type='ResNet',
-        depth=50,
-        num_stages=4,
-        out_indices=(2, 3),
-        frozen_stages=-1,
-        norm_cfg=dict(type='BN', requires_grad=True),
-        norm_eval=False,
-        with_cp=True,
-        style='pytorch'),
+        type='VoVNet',
+        spec_name='V-99-eSE',
+        norm_eval=True,
+        frozen_stages=1,
+        input_ch=3,
+        out_features=['stage4', 'stage5']),
     img_neck=dict(
-        type='CustomFPN',
-        in_channels=[1024, 2048],
+        type='FPN_LSS',
+        in_channels=768+1024,
         out_channels=512,
-        num_outs=1,
-        start_level=0,
-        out_ids=[0]),
+        extra_upsample=None,
+        input_feature_index=(0,1),
+        scale_factor=2),
     img_view_transformer=dict(
         type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
@@ -68,6 +64,8 @@ model = dict(
         pc_range=point_cloud_range,
         numC_Trans=numC_Trans,
         # num_layer=6,
+        bev_h=256, 
+        bev_w=256,
         depthnet_cfg=dict(use_dcn=False),
         downsample=16),
     img_bev_encoder_backbone=dict(
@@ -98,7 +96,7 @@ model = dict(
             post_center_range=[-61.2, -61.2, -10.0, 61.2, 61.2, 10.0],
             max_num=500,
             score_threshold=0.1,
-            out_size_factor=8,
+            out_size_factor=4,
             voxel_size=voxel_size[:2],
             code_size=9),
         separate_head=dict(
@@ -112,7 +110,7 @@ model = dict(
             point_cloud_range=point_cloud_range,
             grid_size=[1024, 1024, 40],
             voxel_size=voxel_size,
-            out_size_factor=8,
+            out_size_factor=4,
             dense_reg=1,
             gaussian_overlap=0.1,
             max_objs=500,
@@ -126,7 +124,7 @@ model = dict(
             max_pool_nms=False,
             min_radius=[4, 12, 10, 1, 0.85, 0.175],
             score_threshold=0.1,
-            out_size_factor=8,
+            out_size_factor=4,
             voxel_size=voxel_size[:2],
             pre_max_size=1000,
             post_max_size=83,
@@ -263,3 +261,5 @@ custom_hooks = [
 ]
 
 # fp16 = dict(loss_scale='dynamic')
+load_from='./dd3d_det_final.pth'
+find_unused_parameters=True
