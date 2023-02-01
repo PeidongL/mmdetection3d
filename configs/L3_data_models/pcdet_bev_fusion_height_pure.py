@@ -98,8 +98,8 @@ model = dict(
         anchor_generator=dict(
             type='AlignedAnchor3DRangeGenerator',
             ranges=[
-                [0, -10.0, -1.78, 100.0, 10.0, -1.78],
-                [0, -10.0, -0.3, 100.0, 10.0, -0.3]
+                [0, -10.0, -0.4, 100.0, 10.0, -0.4],
+                [0, -10.0, -0.6, 100.0, 10.0, -0.6]
             ],
             sizes=[[4.63, 1.97, 1.74], # car
                    [12.5, 2.94, 3.47],  # truck
@@ -148,7 +148,7 @@ model = dict(
         max_num=500)))
 # dataset settings
 dataset_type = 'PlusKittiDataset'
-l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_data/'
+l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_auto_labeling/j7_10_origin_data/'
 l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
 l3_benchmark_root = l3_data_root
 
@@ -247,7 +247,7 @@ data = dict(
         dataset=dict(
             type=dataset_type,
             data_root=l3_data_root,
-            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_13500.pkl',
             # ann_file=l3_data_root + 'l4e_mini_data_train.pkl',
             split='training',
             pts_prefix='pointcloud',
@@ -264,7 +264,7 @@ data = dict(
     val=dict(
         type=dataset_type,
         data_root=l3_data_root,
-        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
         # ann_file=l3_data_root + 'l4e_mini_data_val.pkl',
         split='training',
         pts_prefix='pointcloud',
@@ -279,7 +279,7 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
-        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
         # data_root=l3_data_root,
         # ann_file=l3_data_root + 'l4e_mini_data_test.pkl',
         split='training',

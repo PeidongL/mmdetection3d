@@ -274,6 +274,7 @@ class HeightDepthTransform(DepthLSSTransform):
         self,
         in_channels: int,
         out_channels: int,
+        used_cameras: int,
         image_size: Tuple[int, int],
         feature_size: Tuple[int, int],
         point_cloud_range: Tuple[float, float, float, float, float, float],
@@ -302,7 +303,7 @@ class HeightDepthTransform(DepthLSSTransform):
             in_filters = self.C
             out_filters = self.C
             ihr_layers.append(
-                IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=2)
+                IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=used_cameras)
             )
         self.feature_size = feature_size
         self.ihr_layers = nn.ModuleList(ihr_layers)
