@@ -11,7 +11,7 @@ point_cloud_range = [-24, -24, -2, 72, 24, 6]
 
 use_sync_bn=True # set Fasle when debug
 used_cameras = 4
-use_offline_img_feat=False
+use_offline_img_feat=True
 offline_feature_resize_shape=(72, 120)
 used_sensors = {'use_lidar': True,
                'use_camera': True,
@@ -256,7 +256,7 @@ train_pipeline = [
 ]
 
 test_pipeline = [
-    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=True,
+    dict(type='PrepareImageInputs', data_config=data_config, is_plusdata=True, use_offline_feature=use_offline_img_feat,
          offline_feature_resize_shape=offline_feature_resize_shape),
     dict(
         type='LoadPointsFromFile',
@@ -264,7 +264,7 @@ test_pipeline = [
         load_dim=4,
         use_dim=4,
         point_type='float64',
-        using_tele=False,
+        using_tele=using_tele,
         file_client_args=file_client_args),
     dict(
         type='LoadAnnotationsBEVDepth_Plus',
@@ -429,7 +429,7 @@ runner = dict(max_epochs=40)
 
 # Use evaluation interval=2 reduce the number of evaluation timese
 evaluation = dict(interval=5)
-checkpoint_config = dict(interval=10)
+checkpoint_config = dict(interval=4)
 workflow = [('train', 2), ('val', 1)]
 # resume_from ='work_dirs/L4_data_models/pcdet/lidar_only/pcdet_L4_bev_fusion_align_with_prefusion/2022-11-17T14-40-31/epoch_10.pth'
 find_unused_parameters=True
