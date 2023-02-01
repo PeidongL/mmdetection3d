@@ -182,7 +182,7 @@ model = dict(
 
 # dataset settings
 dataset_type = 'PlusKittiDataset'
-l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_data/'
+l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_auto_labeling/j7_10_origin_data/'
 l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
 l3_benchmark_root = l3_data_root
 
@@ -305,8 +305,8 @@ eval_pipeline = [
 ]
 
 data = dict(
-    samples_per_gpu=8,
-    workers_per_gpu=8,
+    samples_per_gpu=4,
+    workers_per_gpu=4,
     train=dict(
         type='RepeatDataset',
         times=2,
@@ -314,7 +314,7 @@ data = dict(
             type=dataset_type,
             data_root=l3_data_root,
             # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12192.pkl',
-            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12297_0118.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_13500.pkl',
             split='training',
             pts_prefix='pointcloud',
             pipeline=train_pipeline,
@@ -331,7 +331,7 @@ data = dict(
         type=dataset_type,
         data_root=l3_data_root,
         # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
-        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
         split='training',
         pts_prefix='pointcloud',
         pipeline=test_pipeline,
@@ -346,7 +346,7 @@ data = dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
         # ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1362.pkl',
-        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1369_0118.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
         split='training',
         pts_prefix='pointcloud',
         samples_per_gpu=8,
