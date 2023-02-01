@@ -23,12 +23,13 @@ class PaintPointsWithImageFeature:
         full_image_features = []
             
         for camera_idx in range(self.used_cameras):
-            cur_image_file = images_path[camera_idx]
-            feature_name = cur_image_file.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
-            if not os.path.exists(feature_name): # l4 old dataset
-                feature_name = cur_image_file.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
-            # cur_feature_file = cur_image_file.replace(camera_names[camera_idx], camera_names[camera_idx]+'_feature')
-            # cur_feature_file = cur_feature_file.replace('.jpg', '_0.npy')
+            filename = images_path[camera_idx]
+            if '.png' in filename: # autolabel data
+                feature_name = filename.replace('_camera', '_camera_feature').replace('.png', '.npy') 
+            else: #label data
+                feature_name = filename.replace('_camera', '_camera_py_feature').replace('.jpg', '_0.npy') 
+                if not os.path.exists(feature_name): # l4 old dataset
+                    feature_name = filename.replace('_camera', '_camera_feature').replace('.jpg', '_0.npy')
             feature = np.load(feature_name)
             feature = torch.from_numpy(feature)
             full_image_features.append(feature)
