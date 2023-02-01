@@ -5,7 +5,7 @@
 config=configs/L3_data_models/bevfusion/bevdepth_fusion.py
 
 export NCCL_P2P_DISABLE=1 
-CUDA_VISIBLE_DEVICES="5,6,7,8" \
+CUDA_VISIBLE_DEVICES="4,5,6,7" \
 PORT=30000 \
 bash tools/dist_train.sh \
 $config \
