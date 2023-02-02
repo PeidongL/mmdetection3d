@@ -82,8 +82,11 @@ class BEVDepth(BEVDet):
         img_feats, pts_feats, depth = self.extract_feat(
             points, img=img_inputs, img_metas=img_metas, **kwargs)
         gt_depth = kwargs['gt_depth']
-        loss_depth = self.img_view_transformer.get_depth_loss(gt_depth, depth)
-        losses = dict(loss_depth=loss_depth)
+        if img_feats is not None:
+            loss_depth = self.img_view_transformer.get_depth_loss(gt_depth, depth)
+            losses = dict(loss_depth=loss_depth)
+        else:
+            losses = dict()
         rad_feats = None
         loss_fused = self.forward_mdfs_train(pts_feats, img_feats, rad_feats, gt_bboxes_3d,
                                             gt_labels_3d, img_metas,
