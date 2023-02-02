@@ -119,6 +119,7 @@ class L4Dataset():
         for label in labels:
             box_array.append(label['box3d_lidar'])
         box_array = np.array(box_array, dtype=float)
+        box_array[:,2] -= box_array[:,5] / 2
         point_indices = points_in_boxes_cpu(torch.from_numpy(points[:, 0:3]).unsqueeze_(0),
                                                                   torch.from_numpy(box_array).unsqueeze_(0)
                                                                   ).numpy()

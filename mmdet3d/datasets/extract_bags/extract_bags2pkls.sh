@@ -38,7 +38,8 @@ function generate_image_txt() {
 
 function generate_pkl() {
     # subfolders = ('s1' 's2' 's3')
-    subfolders=('CN_L4_origin_data' 'hard_case_origin_data' 'side_vehicle_origin_data' 'under_tree_origin_data')
+    subfolders=('L4E_origin_data')
+    # subfolders=('CN_L4_origin_data' 'hard_case_origin_data' 'side_vehicle_origin_data' 'under_tree_origin_data')
     used_sensors='lc'
     for subfolder in ${subfolders[*]}; do
     python mmdet3d/datasets/extract_bags/generate_pkls.py \
