@@ -148,10 +148,15 @@ model = dict(
         max_num=500)))
 # dataset settings
 dataset_type = 'PlusKittiDataset'
-l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_auto_labeling/j7_10_origin_data/'
-l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
+# l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_auto_labeling/j7_10_origin_data/'
+l3_data_root='/mnt/intel/jupyterhub/mrb/datasets/L4E_origin_data/'
+# l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
 l3_benchmark_root = l3_data_root
 
+l4_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_extracted_data/CN_L4_origin_data/'
+hard_case_data = '/mnt/intel/jupyterhub/swc/datasets/L4_extracted_data/hard_case_origin_data/'
+side_vehicle_data = '/mnt/intel/jupyterhub/swc/datasets/L4_extracted_data/side_vehicle_origin_data/'
+under_tree_data = '/mnt/intel/jupyterhub/swc/datasets/L4_extracted_data/under_tree_origin_data/'
 
 class_names = ['Car', 'Truck']
 input_modality = dict(use_lidar=True, use_camera=False)
@@ -237,18 +242,14 @@ test_pipeline = [
             dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
         ])
 ]
-
-data = dict(
-    samples_per_gpu=8,
-    workers_per_gpu=8,
-    train=dict(
-        type='RepeatDataset',
-        times=2,
-        dataset=dict(
+concat_train_data = dict(
+    type='ConcatDataset',
+    datasets=[
+        # l3
+        dict(
             type=dataset_type,
             data_root=l3_data_root,
-            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_13500.pkl',
-            # ann_file=l3_data_root + 'l4e_mini_data_train.pkl',
+            ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_train_12321.pkl',
             split='training',
             pts_prefix='pointcloud',
             pipeline=train_pipeline,
@@ -257,14 +258,84 @@ data = dict(
             test_mode=False,
             pcd_limit_range=point_cloud_range,
             used_cameras=used_cameras,
-            # we use box_type_3d='LiDAR' in kitti and nuscenes dataset
-            # and box_type_3d='Depth' in sunrgbd and scannet dataset.
             box_type_3d='LiDAR',
-            file_client_args=file_client_args)),
+            file_client_args=file_client_args
+        ),
+        # l4
+        dict(
+            type=dataset_type,
+            data_root=l4_data_root,
+            ann_file=l4_data_root + 'Kitti_L4_data_mm3d_infos_train.pkl',
+            split='training',
+            pts_prefix='pointcloud',
+            pipeline=train_pipeline,
+            modality=input_modality,
+            classes=class_names,
+            test_mode=False,
+            pcd_limit_range=point_cloud_range,
+            used_cameras=used_cameras,
+            box_type_3d='LiDAR',
+            file_client_args=file_client_args
+        ),
+        dict(
+            type=dataset_type,
+            data_root=hard_case_data,
+            ann_file=hard_case_data + 'Kitti_L4_data_mm3d_infos_train.pkl',
+            split='training',
+            pts_prefix='pointcloud',
+            pipeline=train_pipeline,
+            modality=input_modality,
+            classes=class_names,
+            test_mode=False,
+            pcd_limit_range=point_cloud_range,
+            used_cameras=used_cameras,
+            box_type_3d='LiDAR',
+            file_client_args=file_client_args
+        ),
+        dict(
+            type=dataset_type,
+            data_root=side_vehicle_data,
+            ann_file=side_vehicle_data + 'Kitti_L4_data_mm3d_infos_train.pkl',
+            split='training',
+            pts_prefix='pointcloud',
+            pipeline=train_pipeline,
+            modality=input_modality,
+            classes=class_names,
+            test_mode=False,
+            pcd_limit_range=point_cloud_range,
+            used_cameras=used_cameras,
+            box_type_3d='LiDAR',
+            file_client_args=file_client_args
+        ),
+        dict(
+            type=dataset_type,
+            data_root=under_tree_data,
+            ann_file=under_tree_data + 'Kitti_L4_data_mm3d_infos_train.pkl',
+            split='training',
+            pts_prefix='pointcloud',
+            pipeline=train_pipeline,
+            modality=input_modality,
+            classes=class_names,
+            test_mode=False,
+            pcd_limit_range=point_cloud_range,
+            used_cameras=used_cameras,
+            box_type_3d='LiDAR',
+            file_client_args=file_client_args
+        ),
+    ]
+)
+data = dict(
+    samples_per_gpu=8,
+    workers_per_gpu=8,
+    train=dict(
+        type='RepeatDataset',
+        times=2,
+        dataset=concat_train_data),
     val=dict(
         type=dataset_type,
         data_root=l3_data_root,
-        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
+        # ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
+        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1372.pkl',
         # ann_file=l3_data_root + 'l4e_mini_data_val.pkl',
         split='training',
         pts_prefix='pointcloud',
@@ -279,7 +350,9 @@ data = dict(
     test=dict(
         type=dataset_type,
         data_root=l3_benchmark_root,
-        ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
+        # ann_file=l3_benchmark_root + 'Kitti_L4_lc_data_mm3d_infos_val_1500.pkl',
+        ann_file=l3_data_root + 'Kitti_L4_lc_data_mm3d_infos_val_1372.pkl',
+        
         # data_root=l3_data_root,
         # ann_file=l3_data_root + 'l4e_mini_data_test.pkl',
         split='training',

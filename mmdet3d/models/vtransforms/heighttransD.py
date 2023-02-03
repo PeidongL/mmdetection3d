@@ -157,7 +157,7 @@ class IHRLayer(nn.Module):
         return output, reference_points
 
 @NECKS.register_module()
-class HeighTransform(BaseDepthTransform):
+class HeighTransform(BaseDepthTransform): # no need feature size
     def __init__(
         self,
         in_channels: int,
@@ -313,31 +313,6 @@ class HeightDepthTransform(DepthLSSTransform):
         # nn.init.xavier_uniform_(self.query_embedding.weight)
         xavier_init(self.query_embedding, distribution='uniform', bias=0.)
         self.positional_encoding = LearnedPositionalEncoding(self.C // 2, self.bev_h, self.bev_w)
-
-    @staticmethod
-    def get_reference_points(H, W, Z=8, bs=1, device='cuda', dtype=torch.float):
-        """
-        Args:
-            H, W: spatial shape of bev.
-            Z: hight of pillar.
-            D: sample D points uniformly from each pillar.
-            device (obj:`device`): The device where
-                reference_points should be.
-        Returns:
-            Tensor: reference points used in decoder, has \
-                shape (bs, num_keys, num_levels, 2).
-        """
-        ref_y, ref_x = torch.meshgrid(
-            torch.linspace(
-                0.5, H - 0.5, H, dtype=dtype, device=device),
-            torch.linspace(
-                0.5, W - 0.5, W, dtype=dtype, device=device)
-        )
-        ref_y = ref_y.reshape(-1)[None] / H
-        ref_x = ref_x.reshape(-1)[None] / W
-        ref_2d = torch.stack((ref_x, ref_y), -1)
-        ref_2d = ref_2d.repeat(bs, 1, 1).unsqueeze(1)
-        return ref_2d
 
     @force_fp32()
     def get_feats_depth(self, x, d):

@@ -161,7 +161,7 @@ class PlusKittiDataset(KittiDataset):
         # in imu coordinates
         gt_bboxes_3d = annos['gt_boxes_lidar']
         # gt_bboxes_3d_raw = annos['gt_boxes_lidar']
-        # gt_bboxes_3d = LiDARInstance3DBoxes(gt_bboxes_3d, origin=(0.5, 0.5, 0.5)) # todo
+        gt_bboxes_3d = LiDARInstance3DBoxes(gt_bboxes_3d, origin=(0.5, 0.5, 0.5)) # todo
         gt_bboxes = annos['bbox']  # [[1,1,1,1],...,]
 
         selected = self.drop_arrays_by_name(gt_names, ['DontCare'])
