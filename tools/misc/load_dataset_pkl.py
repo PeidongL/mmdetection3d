@@ -34,6 +34,11 @@ def analysis_pkl(data_root, pkl_name):
 
     pkl_file = open(pkl_name, 'rb')
     data = pickle.load(pkl_file)
+    
+    #generate mini dataset pkl
+    with open(os.path.join(data_root, "mini_data_file.pkl"), 'wb') as f:
+        pickle.dump(data[0:10], f)
+    
     shape_dict = defaultdict(int)
     for d in data:
         # img_shape = d['image']['front_left_camera']['image_shape']
