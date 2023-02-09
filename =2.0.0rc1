@@ -1,0 +1,9 @@
+Looking in links: https://download.openmmlab.com/mmcv/dist/cu113/torch1.10.0/index.html
+Requirement already satisfied: mmcv in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (1.6.0)
+Requirement already satisfied: pyyaml in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (6.0)
+Requirement already satisfied: yapf in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (0.32.0)
+Requirement already satisfied: addict in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (2.4.0)
+Requirement already satisfied: packaging in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (21.3)
+Requirement already satisfied: numpy in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (1.23.1)
+Requirement already satisfied: Pillow in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from mmcv) (8.3.2)
+Requirement already satisfied: pyparsing!=3.0.5,>=2.0.2 in /home/peidong.li/miniconda3/envs/fusion/lib/python3.8/site-packages (from packaging->mmcv) (3.0.9)

@@ -34,7 +34,7 @@ grid_config = {
     'x': [-51.2, 51.2, 0.4],
     'y': [-51.2, 51.2, 0.4],
     'z': [-5, 3, 8],
-    'depth': [1.0, 60.0, 0.5],
+    'depth': [2.0, 58.0, 0.5],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
@@ -42,25 +42,32 @@ voxel_size = [0.1, 0.1, 0.2]
 numC_Trans = 80
 
 multi_adj_frame_id_cfg = (1, 8+1, 1)
+custom_imports = dict(imports='mmcls.models', allow_failed_imports=False)
+checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/swin-v2/pretrain/swinv2-base-w12_3rdparty_in21k-192px_20220803-f7dc9763.pth'
 
 model = dict(
     type='BEVDepth4D',
-    align_after_view_transfromation=True,
+    align_after_view_transfromation=False,
     num_adj=len(range(*multi_adj_frame_id_cfg)),
     img_backbone=dict(
-        type='VoVNet',
-        spec_name='V-99-eSE',
-        norm_eval=True,
-        # with_cp=True,
-        input_ch=3,
-        out_features=['stage4', 'stage5']),
+        type='mmcls.SwinTransformerV2',
+        arch='base',
+        img_size=256,
+        out_indices=[2, 3],
+        window_size=[16, 16, 16, 8],
+        drop_path_rate=0.2,
+        pretrained_window_sizes=[12, 12, 12, 6],
+        with_cp=True,
+        init_cfg=dict(
+            type='Pretrained', checkpoint=checkpoint_file,
+            prefix='backbone.')),
     img_neck=dict(
-        type='CustomFPN',
-        in_channels=[768, 1024],
+        type='FPN_LSS',
+        in_channels=512+1024,
         out_channels=512,
-        num_outs=1,
-        start_level=0,
-        out_ids=[0]),
+        extra_upsample=None,
+        input_feature_index=(0,1),
+        scale_factor=2),
     img_view_transformer=dict(
         type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
@@ -111,16 +118,7 @@ model = dict(
             voxel_size=voxel_size[:2],
             code_size=9),
         separate_head=dict(
-            type='DCNSeparateHead',
-            dcn_config=dict(
-                type='DCN',
-                in_channels=64,
-                out_channels=64,
-                kernel_size=3,
-                padding=1,
-                groups=4),
-            init_bias=-2.19,
-            final_kernel=3),
+            type='SeparateHead', init_bias=-2.19, final_kernel=3),
         loss_cls=dict(type='GaussianFocalLoss', reduction='mean'),
         loss_bbox=dict(type='L1Loss', reduction='mean', loss_weight=0.25),
         norm_bbox=True),
@@ -221,26 +219,6 @@ test_pipeline = [
         ])
 ]
 
-eval_pipeline = [
-    dict(type='PrepareImageInputs', data_config=data_config, sequential=True),
-    dict(
-        type='LoadAnnotationsBEVDepth',
-        bda_aug_conf=bda_aug_conf,
-        classes=class_names,
-        is_train=False),
-    dict(
-        type='LoadPointsFromFile',
-        coord_type='LIDAR',
-        load_dim=5,
-        use_dim=5,
-        file_client_args=file_client_args),
-    dict(
-        type='DefaultFormatBundle3D',
-        class_names=class_names,
-        with_label=False),
-    dict(type='Collect3D', keys=['img_inputs'])
-]
-
 input_modality = dict(
     use_lidar=False,
     use_camera=True,
@@ -283,16 +261,15 @@ for key in ['val', 'test']:
 data['train']['dataset'].update(share_data_config)
 
 # Optimizer
-optimizer = dict(type='AdamW', lr=5e-5, weight_decay=1e-2)
+optimizer = dict(type='AdamW', lr=2e-4, weight_decay=1e-2)
 optimizer_config = dict(grad_clip=dict(max_norm=5, norm_type=2))
 lr_config = dict(
     policy='step',
     warmup='linear',
-    warmup_iters=800,
+    warmup_iters=200,
     warmup_ratio=0.001,
     step=[20,])
 runner = dict(type='EpochBasedRunner', max_epochs=20)
-evaluation = dict(interval=4, pipeline=eval_pipeline)
 
 custom_hooks = [
     dict(
@@ -305,9 +282,5 @@ custom_hooks = [
         temporal_start_epoch=3,
     ),
 ]
-
-load_from='./dd3d_det_final.pth'
-
-find_unused_parameters=True
 
 # fp16 = dict(loss_scale='dynamic')
