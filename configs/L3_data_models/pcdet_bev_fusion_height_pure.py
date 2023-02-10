@@ -6,13 +6,13 @@ _base_ = [
 voxel_size = [0.25, 0.25, 8]
 point_cloud_range = [0, -10, -2, 100, 10, 6]
 # model settings
-use_sync_bn=True # set Fasle when debug
-used_cameras = 4
+use_sync_bn=False # set Fasle when debug
+used_cameras = 6
 use_offline_img_feat=True
 find_unused_parameters=False
 if use_offline_img_feat:
     find_unused_parameters=True
-used_sensors = {'use_lidar': True,
+used_sensors = {'use_lidar': False,
                'use_camera': True,
                'use_radar': False}
 grid_config = {
@@ -53,7 +53,7 @@ model = dict(
     img_view_transformer=dict(type='HeighTransform',
         in_channels=64,
         out_channels=64,
-        used_cameras=4,
+        used_cameras=used_cameras,
         image_size=(540, 960),
         feature_size=(104, 200), # actualy not used
         point_cloud_range = point_cloud_range,
@@ -149,7 +149,7 @@ model = dict(
 # dataset settings
 dataset_type = 'PlusKittiDataset'
 l3_data_root = '/mnt/intel/jupyterhub/swc/datasets/L4_auto_labeling/j7_10_origin_data/'
-l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
+# l3_benchmark_root = '/mnt/intel/jupyterhub/swc/datasets/L4E_extracted_data_1227/L4E_origin_benchmark/'
 l3_benchmark_root = l3_data_root
 
 
@@ -201,9 +201,9 @@ train_pipeline = [
     dict(type='PointsRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='ObjectRangeFilter', point_cloud_range=point_cloud_range),
     dict(type='PointShuffle'),
-    dict(type='DefaultFormatBundle3D', class_names=class_names),
+    dict(type='DefaultFormatBundleMultiCam3D', class_names=class_names, stack_image_feature=False),
     dict(type='Collect3D', keys=['points', 'img', 'gt_bboxes_3d', 'gt_labels_3d', 
-                                 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+                                 'img_feature', 'side_img_feature', 'rear_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
 ]
 
 test_pipeline = [
@@ -231,10 +231,11 @@ test_pipeline = [
             dict(
                 type='PointsRangeFilter', point_cloud_range=point_cloud_range),
             dict(
-                type='DefaultFormatBundle3D',
+                type='DefaultFormatBundleMultiCam3D',
+                stack_image_feature=False,
                 class_names=class_names,
                 with_label=False),
-            dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'side_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
+            dict(type='Collect3D', keys=['points', 'img', 'img_feature', 'side_img_feature', 'rear_img_feature', 'lidar2img', 'lidar2camera', 'camera_intrinsics'])
         ])
 ]
 

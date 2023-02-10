@@ -106,6 +106,7 @@ class BEVFusion(MVXTwoStageDetector):
                       img=None,
                       img_feature=None,
                       side_img_feature=None,
+                      rear_img_feature=None,
                       lidar2img=None,
                       lidar2camera=None, 
                       camera_intrinsics=None,
@@ -119,6 +120,8 @@ class BEVFusion(MVXTwoStageDetector):
         offline_img_features = [img_feature]
         if side_img_feature is not None:
             offline_img_features.append(side_img_feature)
+        if rear_img_feature is not None:
+            offline_img_features.append(rear_img_feature)
         img_feats, pts_feats, rad_feats = self.extract_feat(points, img, offline_img_features, lidar2img, lidar2camera, camera_intrinsics, radar, img_metas)
         # calculate loss
         losses = dict()
@@ -130,7 +133,7 @@ class BEVFusion(MVXTwoStageDetector):
     
     
     def forward_test(self, points, img_metas, img=None, radar=None, 
-                     img_feature=None, side_img_feature=None, lidar2img=None, lidar2camera=None,
+                     img_feature=None, side_img_feature=None, rear_img_feature=None, lidar2img=None, lidar2camera=None,
                      camera_intrinsics=None, **kwargs):
         """
         Args:
@@ -161,10 +164,13 @@ class BEVFusion(MVXTwoStageDetector):
             radar =[radar] if radar is None else radar
             img_feature =[img_feature] if img_feature is None else img_feature
             side_img_feature =[side_img_feature] if side_img_feature is None else side_img_feature
+            rear_img_feature =[rear_img_feature] if rear_img_feature is None else rear_img_feature
             
             offline_img_features = [img_feature[0]]
             if side_img_feature is not None:
                 offline_img_features.append(side_img_feature[0])
+            if rear_img_feature is not None:
+                offline_img_features.append(rear_img_feature[0])            
             lidar2img = [lidar2img] if lidar2img is None else lidar2img
             lidar2camera = [lidar2camera] if lidar2camera is None else lidar2camera
             camera_intrinsics = [camera_intrinsics] if camera_intrinsics  is None else camera_intrinsics
