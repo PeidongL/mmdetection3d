@@ -226,7 +226,7 @@ test_data_config = dict(
     ann_file=data_root + 'bevdetv2-nuscenes_infos_val.pkl')
 
 data = dict(
-    samples_per_gpu=16,
+    samples_per_gpu=8,
     workers_per_gpu=4,
     train=dict(
         type='CBGSDataset',
@@ -255,15 +255,15 @@ lr_config = dict(
     warmup='linear',
     warmup_iters=200,
     warmup_ratio=0.001,
-    step=[20,])
-runner = dict(type='EpochBasedRunner', max_epochs=20)
+    step=[24,])
+runner = dict(type='EpochBasedRunner', max_epochs=24)
 
 custom_hooks = [
     dict(
         type='MEGVIIEMAHook',
         init_updates=10560,
         priority='NORMAL',
-        # resume = 'work_dirs/bevheight/bevheight-r50-depth-cbgs/v1_no_dcn/bevheight-r50-depth-cbgs/epoch_16_ema.pth',
+        resume = 'work_dirs/bevheight/bevheight-convnextv2-depth-cbgs/v3/bevheight-convnextv2-depth-cbgs/epoch_13_ema.pth',
     ),
 ]
 

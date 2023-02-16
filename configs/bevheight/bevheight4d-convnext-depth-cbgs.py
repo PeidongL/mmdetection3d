@@ -22,7 +22,7 @@ data_config = {
     'src_size': (900, 1600),
 
     # Augmentation
-    'resize': (-0.06, 0.25),
+    'resize': (-0.136, 0.25),
     'rot': (-5.4, 5.4),
     'flip': True,
     'crop_h': (0.0, 0.0),
@@ -34,38 +34,38 @@ grid_config = {
     'x': [-51.2, 51.2, 0.4],
     'y': [-51.2, 51.2, 0.4],
     'z': [-5, 3, 8],
-    'depth': [2.0, 58.0, 0.5],
+    'depth': [1.0, 60.0, 0.5],
 }
 
 voxel_size = [0.1, 0.1, 0.2]
 
 numC_Trans = 80
 
-multi_adj_frame_id_cfg = (1, 2+1, 1)
+multi_adj_frame_id_cfg = (1, 8+1, 1)
 custom_imports = dict(imports='mmcls.models', allow_failed_imports=False)
 checkpoint_file = 'https://download.openmmlab.com/mmclassification/v0/convnext/convnext-base_3rdparty_32xb128-noema_in1k_20220222-dba4f95f.pth'
 
 model = dict(
     type='BEVDepth4D',
-    align_after_view_transfromation=False,
+    align_after_view_transfromation=True,
     num_adj=len(range(*multi_adj_frame_id_cfg)),
     img_backbone=dict(
         type='mmcls.ConvNeXt',
         arch='base',
         out_indices=[2, 3],
-        drop_path_rate=0.4,
-        layer_scale_init_value=1.0,
+        drop_path_rate=0.5,
         gap_before_final_norm=False,
+        with_cp=True,
         init_cfg=dict(
             type='Pretrained', checkpoint=checkpoint_file,
             prefix='backbone.')),
     img_neck=dict(
-        type='CustomFPN',
-        in_channels=[512, 1024],
+        type='FPN_LSS',
+        in_channels=512+1024,
         out_channels=512,
-        num_outs=1,
-        start_level=0,
-        out_ids=[0]),
+        extra_upsample=None,
+        input_feature_index=(0,1),
+        scale_factor=2),
     img_view_transformer=dict(
         type='LSSViewTransformerBEVHeightDepth',
         grid_config=grid_config,
@@ -74,6 +74,7 @@ model = dict(
         numC_Trans=numC_Trans,
         bev_h=256, 
         bev_w=256,
+        # num_layer=5,
         depthnet_cfg=dict(use_dcn=False),
         downsample=16),
     img_bev_encoder_backbone=dict(
@@ -115,17 +116,7 @@ model = dict(
             voxel_size=voxel_size[:2],
             code_size=9),
         separate_head=dict(
-            type='DCNSeparateHead',
-            dcn_config=dict(
-                type='DCN',
-                in_channels=64,
-                out_channels=64,
-                kernel_size=3,
-                padding=1,
-                groups=4),
-            init_bias=-2.19,
-            final_kernel=3),
-        loss_cls=dict(type='GaussianFocalLoss', reduction='mean'),
+            type='SeparateHead', init_bias=-2.19, final_kernel=3),
         loss_bbox=dict(type='L1Loss', reduction='mean', loss_weight=0.25),
         norm_bbox=True),
     # model training and testing settings
@@ -245,7 +236,7 @@ test_data_config = dict(
     ann_file=data_root + 'bevdetv2-nuscenes_infos_val.pkl')
 
 data = dict(
-    samples_per_gpu=2,
+    samples_per_gpu=8,
     workers_per_gpu=4,
     train=dict(
         type='CBGSDataset',

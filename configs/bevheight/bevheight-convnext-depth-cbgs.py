@@ -18,11 +18,11 @@ data_config = {
     ],
     'Ncams':
     6,
-    'input_size': (256, 704),
+    'input_size': (512, 1408),
     'src_size': (900, 1600),
 
     # Augmentation
-    'resize': (-0.06, 0.11),
+    'resize': (-0.11, 0.22),
     'rot': (-5.4, 5.4),
     'flip': True,
     'crop_h': (0.0, 0.0),
@@ -49,9 +49,9 @@ model = dict(
         type='mmcls.ConvNeXt',
         arch='base',
         out_indices=[2, 3],
-        drop_path_rate=0.4,
-        layer_scale_init_value=1.0,
+        drop_path_rate=0.5,
         gap_before_final_norm=False,
+        with_cp=True,
         init_cfg=dict(
             type='Pretrained', checkpoint=checkpoint_file,
             prefix='backbone.')),
@@ -261,7 +261,7 @@ custom_hooks = [
         type='MEGVIIEMAHook',
         init_updates=10560,
         priority='NORMAL',
-        # resume = 'work_dirs/bevheight/bevheight-r50-depth-cbgs/v1_no_dcn/bevheight-r50-depth-cbgs/epoch_16_ema.pth',
+        # resume = 'work_dirs/bevheight/bevheight-convnext-depth-cbgs/lead/bevheight-convnext-depth-cbgs/epoch_5_ema.pth',
     ),
 ]
 
