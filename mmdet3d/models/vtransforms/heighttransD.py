@@ -82,15 +82,12 @@ class IHRLayer(nn.Module):
             # SE_Block(out_channels),
             # CBAM_Block(kernel_size=7),
         )
-        # self.seblock = SE_Block(out_channels)
-        # self.cbam = CBAM_Block(kernel_size=7)
-        # self.stereo_consist = nn.Sequential(
-        #     nn.Conv2d(out_channels * 2,
-        #         out_channels, 3, padding=1),
-        #     nn.BatchNorm2d(out_channels),
-        #     nn.ReLU(True),
-        #     SE_Block(out_channels),
-        # )
+        self.stereo_consist = nn.Sequential(
+            nn.Conv2d(in_channels * 2,
+                out_channels, 3, padding=1),
+            nn.BatchNorm2d(out_channels),
+            nn.ReLU(True),
+        )
 
     def forward(self, inputs, bev_queries, bev_pos, reference_points, point_cloud_range, 
                 lidar_to_img, bev_h, bev_w, depth_prob, img_metas, **kwargs):
@@ -117,20 +114,29 @@ class IHRLayer(nn.Module):
             output = torch.nan_to_num(output)
             bev_mask = torch.nan_to_num(bev_mask)
             output= output * bev_mask
+
+            B, C = output.size()[:2]
+            output = output.permute(0, 2, 1, 3, 4).flatten(2).permute(0, 2, 1).view(B, -1, bev_h, bev_w)
+            fl_bev_feat = output[:, :64,...]
+            fr_bev_feat = output[:, 64:,...]
+            similarity = torch.mean(fl_bev_feat * fr_bev_feat,dim=1,keepdim=True)
+            output = (self.stereo_consist(output) * similarity).unsqueeze(-1)
             
             reference_points_3d, output_side, bev_mask = feature_sampling(
             inputs[1], reference_points, depth_prob, None, point_cloud_range, lidar_to_img[:,2:4,...], img_metas)
             output_side = torch.nan_to_num(output_side)
             bev_mask = torch.nan_to_num(bev_mask)
             output_side= output_side * bev_mask
-            
+            output_side = output_side.squeeze(-1).view(B, C, bev_h, bev_w, -1)
+
             reference_points_3d, output_rear, bev_mask = feature_sampling(
             inputs[2], reference_points, depth_prob, None, point_cloud_range, lidar_to_img[:,4:6,...], img_metas)
             output_rear = torch.nan_to_num(output_rear)
             bev_mask = torch.nan_to_num(bev_mask)
             output_rear= output_rear * bev_mask
+            output_rear = output_rear.squeeze(-1).view(B, C, bev_h, bev_w, -1)
             
-            output = torch.cat((output, output_side, output_rear), -2)
+            output = torch.cat((output, output_side, output_rear), -1)
             output = output * attention_weights.sigmoid()
         else:
             reference_points_3d, output, bev_mask = feature_sampling(
@@ -140,11 +146,10 @@ class IHRLayer(nn.Module):
             bev_mask = torch.nan_to_num(bev_mask)
             attention_weights = attention_weights.sigmoid()*bev_mask
             output = output * attention_weights
-
+            # output = output.permute(0, 2, 1, 3, 4).flatten(2).permute(0, 2, 1).unsqueeze(-1)
+            # output = self.stereo_consist(output).squeeze(-1)
         #  B,C ,Nq, N, D
-        # output = output.permute(0, 2, 1, 3, 4).flatten(2).permute(0, 2, 1).unsqueeze(-1)
-        # output = self.stereo_consist(output).squeeze(-1)
-        output = output.squeeze(-1).sum(-1)
+        output = output.sum(-1)
 
         # output = output.permute(0, 2, 1).contiguous()
         # output = self.output_proj(output)
@@ -152,11 +157,9 @@ class IHRLayer(nn.Module):
         # output = output.permute(0, 2, 1).contiguous()
 
         # B, C, HW
-        B, C = output.size()[:2]
-        output = output.view(B, C, bev_h, bev_w)
+        ref_points = reference_points.view(B, bev_h, bev_w, 3)[...,2:3].permute(0,3,1,2).contiguous()
+        output = torch.cat((output,ref_points),1)
         output = self.vtransform(output)
-        # output = self.seblock(output) 
-        # output = self.cbam(output) 
         output = output.flatten(2).permute(0, 2, 1).contiguous()
         # output = self.output_proj(output)
 
@@ -190,7 +193,7 @@ class HeighTransform(BaseDepthTransform): # no need feature size
             dbound=dbound,
         )
         self.only_use_height = True
-        self.num_layer = 3
+        self.num_layer = 2
         self.pc_range = point_cloud_range
         ihr_layers = []
         for i in range(self.num_layer):
@@ -200,6 +203,17 @@ class HeighTransform(BaseDepthTransform): # no need feature size
                 IHRLayer(in_filters, out_filters, self.only_use_height, num_cams=used_cameras)
             )
         self.ihr_layers = nn.ModuleList(ihr_layers)
+
+        self.img_conv=[]
+        img_conv = nn.Sequential(
+            nn.Conv2d(self.num_img_features,
+                self.num_img_features, 3, padding=1),
+            nn.BatchNorm2d(self.num_img_features),
+            nn.ReLU(True),
+        )
+        for i in range(used_cameras/2):
+            self.img_conv.append(img_conv)
+
         self.bev_h = bev_grid_map_size[0]
         self.bev_w = bev_grid_map_size[1]
         self.query_embedding = nn.Embedding(self.bev_h*self.bev_w, self.C)
@@ -243,6 +257,7 @@ class HeighTransform(BaseDepthTransform): # no need feature size
             for i in range(len(img_feats)):
                 B, N, C, fH, fW = img_feats[i].shape
                 img_feat_tmp = img_feats[i].view(B * N, C, fH, fW)
+                img_feat_tmp = self.img_conv[i](img_feat_tmp)
                 img_feat.append(img_feat_tmp)
             dtype = img_feat_tmp.dtype
             device = img_feat_tmp.device
