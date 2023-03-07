@@ -103,9 +103,9 @@ def add_ann_adj_info(extra_tag):
     nuscenes_version = 'v1.0-trainval'
     dataroot = './data/nuscenes/'
     nuscenes = NuScenes(nuscenes_version, dataroot)
-    for set in ['train', 'val']:
+    for set in ['trainval']:
         dataset = pickle.load(
-            open('./data/nuscenes/%s_infos_%s.pkl' % (extra_tag, set), 'rb'))
+            open('./%s_infos_%s.pkl' % (extra_tag, set), 'rb'))
         for id in range(len(dataset['infos'])):
             if id % 10 == 0:
                 print('%d/%d' % (id, len(dataset['infos'])))
@@ -123,7 +123,7 @@ def add_ann_adj_info(extra_tag):
             dataset['infos'][id]['ann_infos'] = ann_infos
             dataset['infos'][id]['ann_infos'] = get_gt(dataset['infos'][id])
             dataset['infos'][id]['scene_token'] = sample['scene_token']
-        with open('./data/nuscenes/%s_infos_%s.pkl' % (extra_tag, set),
+        with open('./%s_infos_%s.pkl' % (extra_tag, set),
                   'wb') as fid:
             pickle.dump(dataset, fid)
 

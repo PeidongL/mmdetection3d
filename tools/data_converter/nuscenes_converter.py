@@ -82,6 +82,7 @@ def create_nuscenes_infos(root_path,
         nusc, train_scenes, val_scenes, test, max_sweeps=max_sweeps)
 
     metadata = dict(version=version)
+    root_path = './'
     if test:
         print('test sample: {}'.format(len(train_nusc_infos)))
         data = dict(infos=train_nusc_infos, metadata=metadata)
@@ -99,6 +100,10 @@ def create_nuscenes_infos(root_path,
         info_val_path = osp.join(root_path,
                                  '{}_infos_val.pkl'.format(info_prefix))
         mmcv.dump(data, info_val_path)
+        data['infos'] = train_nusc_infos+val_nusc_infos
+        info_trainval_path = osp.join(root_path,
+                                 '{}_infos_trainval.pkl'.format(info_prefix))
+        mmcv.dump(data, info_trainval_path)
 
 
 def get_available_scenes(nusc):
