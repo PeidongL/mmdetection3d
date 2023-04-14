@@ -53,7 +53,7 @@ model = dict(
         type='mmcls.ConvNeXt',
         arch='base',
         out_indices=[2, 3],
-        drop_path_rate=0.5,
+        drop_path_rate=0.7,
         gap_before_final_norm=False,
         with_cp=True,
         init_cfg=dict(
@@ -258,7 +258,12 @@ for key in ['val', 'test']:
 data['train']['dataset'].update(share_data_config)
 
 # Optimizer
-optimizer = dict(type='AdamW', lr=2e-4, weight_decay=1e-2)
+optimizer = dict(type='AdamW', lr=2e-4, betas=(0.9, 0.999), weight_decay=0.05, 
+                 _delete_=True,
+                 constructor='LearningRateDecayOptimizerConstructor',
+                 paramwise_cfg={'decay_rate': 0.8,
+                                'decay_type': 'layer_wise',
+                                'num_layers': 12})
 optimizer_config = dict(grad_clip=dict(max_norm=5, norm_type=2))
 lr_config = dict(
     policy='step',
@@ -276,7 +281,7 @@ custom_hooks = [
     ),
     dict(
         type='SequentialControlHook',
-        temporal_start_epoch=3,
+        temporal_start_epoch=2,
     ),
 ]
 
