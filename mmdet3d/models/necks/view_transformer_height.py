@@ -93,7 +93,7 @@ class IHRLayer(nn.Module):
                     )),
             # nn.Conv2d(out_channels, out_channels, 3, padding=1),
             nn.BatchNorm2d(out_channels),
-            nn.ReLU(True),
+            # nn.ReLU(True),
             SE_Block(out_channels),
             CBAM_Block(kernel_size=7),
         )
@@ -148,13 +148,14 @@ class IHRLayer(nn.Module):
 class HeightTrans(nn.Module):
     def __init__(self, grid_config=None, data_config=None, pc_range=None,
                  numC_input=512, numC_Trans=64, num_layer=3,
-                 bev_h=128, bev_w=128, only_use_height=True, **kwargs):
+                 bev_h=128, bev_w=128, only_use_height=True, sid=False, **kwargs):
         super(HeightTrans, self).__init__()
     
         self.numC_input = numC_input
         self.numC_Trans = numC_Trans
         self.only_use_height = only_use_height
         self.num_layer = num_layer
+        self.sid = sid
         if grid_config is None:
             grid_config = {
                 'xbound': [-51.2, 51.2, 0.8],
@@ -374,59 +375,22 @@ class DepthNetPlus(DepthNet):
                  context_channels,
                  depth_channels,
                  use_dcn=True,
-                 use_aspp=True):
+                 use_aspp=True,
+                 with_cp=False,
+                 stereo=False,
+                 bias=0.0,
+                 aspp_mid_channels=-1):
         super(DepthNetPlus, self).__init__(in_channels,
                                            mid_channels,
                                            context_channels,
                                            depth_channels,
                                            use_dcn,
-                                           use_aspp)
-        # self.context_conv = nn.Conv2d(
-        #     mid_channels, context_channels, kernel_size=3, stride=1, padding=1)
-        # depth_conv_list = [
-        #     BasicBlock(mid_channels, mid_channels),
-        #     BasicBlock(mid_channels, mid_channels),
-        #     BasicBlock(mid_channels, mid_channels),
-        # ]
-        # if use_aspp:
-        #     depth_conv_list.append(ASPP(mid_channels, mid_channels))
-        # if use_dcn:
-        #     depth_conv_list.append(
-        #         build_conv_layer(
-        #             cfg=dict(
-        #                 type='DCN',
-        #                 in_channels=mid_channels,
-        #                 out_channels=mid_channels,
-        #                 kernel_size=3,
-        #                 padding=1,
-        #                 groups=4,
-        #                 im2col_step=128,
-        #             )))
-        # # Upsample
-        # depth_conv_list.append(nn.Upsample(scale_factor=2, mode='bilinear',align_corners=True))
-        # depth_conv_list.append(nn.Conv2d(
-        #     mid_channels, mid_channels, kernel_size=3, stride=1, padding=1))
-        # depth_conv_list.append(nn.BatchNorm2d(mid_channels))
-        # depth_conv_list.append(nn.ReLU(inplace=True))
-        # depth_conv_list.append(nn.Conv2d(
-        #     mid_channels, mid_channels, kernel_size=1, stride=1, padding=0))
-        # depth_conv_list.append(nn.Upsample(scale_factor=2, mode='bilinear',align_corners=True))
-        # depth_conv_list.append(nn.Conv2d(
-        #     mid_channels, mid_channels, kernel_size=3, stride=1, padding=1))
-        # depth_conv_list.append(nn.BatchNorm2d(mid_channels))
-        # depth_conv_list.append(nn.ReLU(inplace=True))
-
-        # # Depth pred
-        # depth_conv_list.append(
-        #     nn.Conv2d(
-        #         mid_channels,
-        #         depth_channels,
-        #         kernel_size=1,
-        #         stride=1,
-        #         padding=0))
-        # self.depth_conv = nn.Sequential(*depth_conv_list)
-
-    def forward(self, x, mlp_input):
+                                           use_aspp,
+                                           with_cp,
+                                           stereo,
+                                           bias,
+                                           aspp_mid_channels)
+    def forward(self, x, mlp_input, stereo_metas=None):
         mlp_input = self.bn(mlp_input.reshape(-1, mlp_input.shape[-1]))
         x = self.reduce_conv(x)
         context_se = self.context_mlp(mlp_input)[..., None, None]
@@ -434,7 +398,25 @@ class DepthNetPlus(DepthNet):
         context = self.context_conv(context)
         depth_se = self.depth_mlp(mlp_input)[..., None, None]
         depth = self.depth_se(x, depth_se)
-        depth = self.depth_conv(depth)
+
+        if not stereo_metas is None:
+            if stereo_metas['cv_feat_list'][0] is None:
+                BN, _, H, W = x.shape
+                scale_factor = float(stereo_metas['downsample'])/\
+                               stereo_metas['cv_downsample']
+                cost_volumn = \
+                    torch.zeros((BN, self.depth_channels,
+                                 int(H*scale_factor),
+                                 int(W*scale_factor))).to(x)
+            else:
+                with torch.no_grad():
+                    cost_volumn = self.calculate_cost_volumn(stereo_metas)
+            cost_volumn = self.cost_volumn_net(cost_volumn)
+            depth = torch.cat([depth, cost_volumn], dim=1)
+        if self.with_cp:
+            depth = checkpoint(self.depth_conv, depth)
+        else:
+            depth = self.depth_conv(depth)
         return depth, context
 
 @NECKS.register_module()
@@ -449,6 +431,36 @@ class LSSViewTransformerBEVHeightDepth(HeightTrans):
         self.depth_net = DepthNetPlus(self.numC_input, self.numC_input,
                                       self.numC_Trans, self.D, **depthnet_cfg)
         self.img_feat = None
+
+    def create_frustum(self, depth_cfg, input_size, downsample):
+        """Generate the frustum template for each image.
+
+        Args:
+            depth_cfg (tuple(float)): Config of grid alone depth axis in format
+                of (lower_bound, upper_bound, interval).
+            input_size (tuple(int)): Size of input images in format of (height,
+                width).
+            downsample (int): Down sample scale factor from the input size to
+                the feature size.
+        """
+        H_in, W_in = input_size
+        H_feat, W_feat = H_in // downsample, W_in // downsample
+        d = torch.arange(*depth_cfg, dtype=torch.float)\
+            .view(-1, 1, 1).expand(-1, H_feat, W_feat)
+        self.D = d.shape[0]
+        if self.sid:
+            d_sid = torch.arange(self.D).float()
+            depth_cfg_t = torch.tensor(depth_cfg).float()
+            d_sid = torch.exp(torch.log(depth_cfg_t[0]) + d_sid / (self.D-1) *
+                              torch.log((depth_cfg_t[1]-1) / depth_cfg_t[0]))
+            d = d_sid.view(-1, 1, 1).expand(-1, H_feat, W_feat)
+        x = torch.linspace(0, W_in - 1, W_feat,  dtype=torch.float)\
+            .view(1, 1, W_feat).expand(self.D, H_feat, W_feat)
+        y = torch.linspace(0, H_in - 1, H_feat,  dtype=torch.float)\
+            .view(1, H_feat, 1).expand(self.D, H_feat, W_feat)
+
+        # D x H x W x 3
+        return torch.stack((x, y, d), -1)
 
     def create_grid_infos(self, x, y, z, **kwargs):
         """Generate the grid information including the lower bound, interval,
@@ -467,8 +479,8 @@ class LSSViewTransformerBEVHeightDepth(HeightTrans):
         self.grid_size = torch.Tensor([(cfg[1] - cfg[0]) / cfg[2]
                                        for cfg in [x, y, z]])
 
-    def get_mlp_input(self, rot, tran, intrin, post_rot, post_tran, bda):
-        B, N, _, _ = rot.shape
+    def get_mlp_input(self, sensor2ego, ego2global, intrin, post_rot, post_tran, bda):
+        B, N, _, _ = sensor2ego.shape
         bda = bda.view(B, 1, 3, 3).repeat(1, N, 1, 1)
         mlp_input = torch.stack([
             intrin[:, :, 0, 0],
@@ -485,11 +497,8 @@ class LSSViewTransformerBEVHeightDepth(HeightTrans):
             bda[:, :, 0, 1],
             bda[:, :, 1, 0],
             bda[:, :, 1, 1],
-            bda[:, :, 2, 2],
-        ],
-                                dim=-1)
-        sensor2ego = torch.cat([rot, tran.reshape(B, N, 3, 1)],
-                               dim=-1).reshape(B, N, -1)
+            bda[:, :, 2, 2],], dim=-1)
+        sensor2ego = sensor2ego[:,:,:3,:].reshape(B, N, -1)
         mlp_input = torch.cat([mlp_input, sensor2ego], dim=-1)
         return mlp_input
 
@@ -543,10 +552,10 @@ class LSSViewTransformerBEVHeightDepth(HeightTrans):
     @force_fp32()
     def view_transform_core(self, input, depth, tran_feat):
         B, N, C, H, W = input[0].shape
-        rots, trans, intrins, post_rots, post_trans, bda = input[1:7]
+        sensor2ego, ego2global, intrins, post_rots, post_trans, bda = input[1:7]
         bda = bda.view(B, 1, 3, 3).repeat(1, N, 1, 1)
-        lidar2img_R = intrins.matmul(torch.inverse(rots)).matmul(torch.inverse(bda))
-        lidar2img_t = -intrins.matmul(torch.inverse(rots)).matmul(trans.unsqueeze(-1))
+        lidar2img_R = intrins.matmul(torch.inverse(sensor2ego[:,:,:3,:3])).matmul(torch.inverse(bda))
+        lidar2img_t = -intrins.matmul(torch.inverse(sensor2ego[:,:,:3,:3])).matmul(sensor2ego[:,:,:3, 3].unsqueeze(-1))
         lidar2img = torch.cat((lidar2img_R, lidar2img_t), -1)
         img_aug = torch.cat((post_rots, post_trans.unsqueeze(-1)), -1)
         # depth_digit = depth.view(B, N, self.D, H, W)
@@ -578,14 +587,23 @@ class LSSViewTransformerBEVHeightDepth(HeightTrans):
     def view_transform(self, input, depth, tran_feat):
         return self.view_transform_core(input, depth, tran_feat)
 
-    def forward(self, input):
+    def forward(self, input, stereo_metas=None):
         (x, rots, trans, intrins, post_rots, post_trans, bda,
          mlp_input) = input[:8]
 
         B, N, C, H, W = x.shape
         x = x.view(B * N, C, H, W)
-        depth_digit, tran_feat = self.depth_net(x, mlp_input)
+        depth_digit, tran_feat = self.depth_net(x, mlp_input, stereo_metas)
         # depth_digit = x[:, :self.D, ...]
         # tran_feat = x[:, self.D:self.D +  self.numC_Trans, ...]
         depth = depth_digit.softmax(dim=1)
         return self.view_transform(input, depth, tran_feat)  
+
+@NECKS.register_module()
+class LSSViewTransformerBEVHeightStereo(LSSViewTransformerBEVHeightDepth):
+
+    def __init__(self,  **kwargs):
+        super(LSSViewTransformerBEVHeightStereo, self).__init__(**kwargs)
+        self.cv_frustum = self.create_frustum(kwargs['grid_config']['depth'],
+                                              self.data_config['input_size'],
+                                              downsample=4)
